@@ -1,0 +1,104 @@
+# ============================================================
+# Distributed Condition Monitoring & Data Logging System
+# ============================================================
+
+# ---------- OS ----------
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ---------- Editor / IDE ----------
+.vscode/
+.idea/
+
+# STM32CubeIDE / Eclipse generated state
+.metadata/
+.settings/
+Debug/
+Release/
+
+# Keep project configuration files only if intentionally needed.
+# Do not blindly ignore .project/.cproject if the STM32 project relies on them.
+
+# ---------- C / C++ build outputs ----------
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.exe
+*.out
+
+*.elf
+*.axf
+*.hex
+*.bin
+
+*.map
+*.lst
+*.d
+
+build/
+build-*/
+cmake-build-*/
+
+# ---------- Coverage / sanitizers ----------
+*.gcda
+*.gcno
+*.gcov
+coverage/
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---------- ESP-IDF generated ----------
+sdkconfig
+sdkconfig.old
+managed_components/
+
+# If a reproducible sdkconfig.defaults is used, COMMIT that file.
+
+# ---------- Logs / temporary ----------
+*.tmp
+*.temp
+*.swp
+*.bak
+
+# Raw logs are ignored by default.
+# Promote intentionally useful sanitized evidence into evidence/.
+*.log
+
+# ---------- Secrets ----------
+.env
+.env.*
+!.env.example
+
+secrets.*
+!secrets.example
+
+credentials.*
+private_key*
+*.key
+*.pem
+*.p12
+*.pfx
+
+wifi_config.*
+mqtt_credentials.*
+
+# ---------- Local machine ----------
+local/
+.local/
+
+# ---------- Large/raw captures ----------
+# Commit only curated/sanitized captures intentionally.
+captures/raw/
+
+# ---------- Archives ----------
+*.zip
+*.7z
+*.rar

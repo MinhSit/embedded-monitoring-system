@@ -1,0 +1,56 @@
+# ============================================================
+# Distributed Condition Monitoring & Data Logging System — Line Ending Policy
+# ============================================================
+
+# Repository text files are normalized to LF.
+# This keeps diffs/build scripts consistent across Windows/Linux/CI.
+* text=auto eol=lf
+
+# Windows-native command scripts use CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# ------------------------------------------------------------
+# Binary files — never perform line-ending conversion
+# ------------------------------------------------------------
+
+*.png  -text
+*.jpg  -text
+*.jpeg -text
+*.gif  -text
+*.bmp  -text
+*.ico  -text
+
+*.pdf  -text
+*.doc  -text
+*.docx -text
+*.xls  -text
+*.xlsx -text
+*.ppt  -text
+*.pptx -text
+
+*.zip  -text
+*.7z   -text
+*.rar  -text
+*.gz   -text
+*.tar  -text
+
+*.elf  -text
+*.axf  -text
+*.bin  -text
+*.o    -text
+*.obj  -text
+*.a    -text
+*.lib  -text
+*.so   -text
+*.dll  -text
+*.exe  -text
+
+*.wav  -text
+*.mp3  -text
+*.mp4  -text
+
+# Logic/protocol capture formats that may be binary.
+*.sr   -text
+*.pcap -text
+*.pcapng -text

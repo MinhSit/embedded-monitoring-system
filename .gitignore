@@ -102,3 +102,6 @@ captures/raw/
 *.zip
 *.7z
 *.rar
+
+# STM32CubeIDE local launch configurations
+*.launch

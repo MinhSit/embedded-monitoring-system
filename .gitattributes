@@ -4,7 +4,7 @@
 
 # Repository text files are normalized to LF.
 # This keeps diffs/build scripts consistent across Windows/Linux/CI.
-* text=auto eol=lf
+* text=auto
 
 # Windows-native command scripts use CRLF.
 *.bat text eol=crlf

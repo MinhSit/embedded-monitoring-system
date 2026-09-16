@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include "mpu6050/mpu6050.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -42,6 +43,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+I2C_HandleTypeDef hi2c1;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
@@ -52,6 +55,7 @@ UART_HandleTypeDef huart2;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -91,7 +95,59 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+  mpu6050_status_t wake_status = mpu6050_wake(&hi2c1);
+  if (wake_status != MPU6050_OK){
+      printf("MPU6050 wake failed\r\n");
+  }
+  else{
+	  HAL_Delay(100);
+  }
+
+  uint8_t who_am_i = 0;
+  mpu6050_status_t who_am_i_status = mpu6050_read_who_am_i(&hi2c1, &who_am_i);
+  printf("WHO_AM_I status: %d\r\n", who_am_i_status);
+  if (who_am_i_status == MPU6050_OK)
+  {
+      printf("WHO_AM_I: 0x%02X\r\n", who_am_i);
+  }
+  else{
+      printf("WHO_AM_I read failed\r\n");
+  }
+
+  int16_t ax = 0;
+  int16_t ay = 0;
+  int16_t az = 0;
+  mpu6050_status_t accel_status = mpu6050_read_accel_raw(&hi2c1, &ax, &ay, &az);
+  printf("Accel status: %d\r\n", accel_status);
+  if(accel_status == MPU6050_OK){
+	  printf("AX: %d AY: %d AZ: %d\r\n", ax, ay, az);
+	  float ax_g = ax / 16384.0f;
+	  float ay_g = ay / 16384.0f;
+	  float az_g = az / 16384.0f;
+	  printf("AX: %.3f g AY: %.3f g AZ: %.3f g\r\n", ax_g, ay_g, az_g);
+  }
+  else{
+	  printf("Accel read failed\r\n");
+  }
+
+  int16_t gx = 0;
+  int16_t gy = 0;
+  int16_t gz = 0;
+  mpu6050_status_t gyro_status = mpu6050_read_gyro_raw(&hi2c1, &gx, &gy, &gz);
+  printf("Gyro status: %d\r\n", gyro_status);
+  if(gyro_status == MPU6050_OK){
+	  printf("GX: %d GY: %d GZ: %d\r\n", gx, gy, gz);
+	  float gx_dps = gx / 131.0f;
+	  float gy_dps = gy / 131.0f;
+	  float gz_dps = gz / 131.0f;
+	  printf("GX: %.3f dps GY: %.3f dps GZ: %.3f dps\r\n", gx_dps, gy_dps, gz_dps);
+  }
+  else{
+	  printf("Gyro read failed\r\n");
+  }
+
   printf(
       "=================================\r\n"
       "Embedded Monitoring System\r\n"
@@ -169,6 +225,40 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**

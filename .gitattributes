@@ -1,0 +1,41 @@
+# ============================================================
+# embedded-monitoring-system - Line Ending Policy
+# ============================================================
+
+# Text files are stored as LF in the repository.
+# On Windows, core.autocrlf=true converts to CRLF on checkout.
+* text=auto
+
+# Shell scripts must stay LF (run on Linux CI)
+*.sh  text eol=lf
+
+# Windows scripts must stay CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# ---------- Binary files: never convert ----------
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.bmp  binary
+*.ico  binary
+
+*.pdf  binary
+*.docx binary
+*.xlsx binary
+*.pptx binary
+
+*.zip  binary
+*.7z   binary
+*.gz   binary
+
+*.elf  binary
+*.bin  binary
+*.hex  binary
+*.o    binary
+*.a    binary
+*.exe  binary
+
+# Logic analyzer captures (PulseView)
+*.sr   binary

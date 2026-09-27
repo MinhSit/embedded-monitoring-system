@@ -1,0 +1,84 @@
+# ============================================================
+# embedded-monitoring-system
+# ============================================================
+
+# ---------- OS ----------
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ---------- Editor / IDE ----------
+.vscode/
+.idea/
+
+# STM32CubeIDE / Eclipse local state
+.metadata/
+.settings/
+*.launch
+Debug/
+Release/
+
+# ---------- C build outputs ----------
+*.o
+*.obj
+*.a
+*.lib
+*.exe
+*.out
+*.elf
+*.axf
+*.hex
+*.bin
+*.map
+*.lst
+*.d
+*.su
+*.cyclo
+
+build/
+build-*/
+cmake-build-*/
+
+# ---------- Coverage ----------
+*.gcda
+*.gcno
+*.gcov
+coverage/
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---------- ESP-IDF ----------
+sdkconfig
+sdkconfig.old
+managed_components/
+
+# ---------- Logs / temporary ----------
+*.log
+*.tmp
+*.bak
+*.swp
+
+# ---------- Secrets ----------
+.env
+.env.*
+!.env.example
+secrets.*
+!secrets.example
+credentials.*
+wifi_config.*
+mqtt_credentials.*
+*.key
+*.pem
+
+# ---------- Local ----------
+local/
+captures/raw/
+
+# ---------- Archives ----------
+*.zip
+*.7z
+*.rar

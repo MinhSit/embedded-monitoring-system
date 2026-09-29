@@ -32,6 +32,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define UART_TIME_OUT 100U
+#define BOARD_NAME "NUCLEO-F446RE"
+#define FIRMWARE_VERSION "0.1.0"
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -99,7 +101,12 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  printf("printf OK\r\n");
+  printf("=================================\r\n");
+  printf("Embedded Monitoring System\r\n");
+  printf("Board    : %s\r\n", BOARD_NAME);
+  printf("Firmware : %s\r\n", FIRMWARE_VERSION);
+  printf("=================================\r\n");
+  printf("Boot OK\r\n");
   /* USER CODE END 2 */
 
   /* Infinite loop */

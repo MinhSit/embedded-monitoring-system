@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,7 +31,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define UART_TIME_OUT 100U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -56,7 +56,16 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+int _write(int file, char *ptr, int len)
+{
+    (void) file;
+    HAL_StatusTypeDef status;
+    status = HAL_UART_Transmit(&huart2, (const uint8_t *) ptr, len, UART_TIME_OUT);
+    if(status != HAL_OK){
+        return -1;
+    }
+    return len;
+}
 /* USER CODE END 0 */
 
 /**
@@ -90,12 +99,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  char msg[] = "UART OK\r\n";
-  HAL_StatusTypeDef status;
-  status = HAL_UART_Transmit(&huart2, (const uint8_t *) msg, sizeof(msg) - 1, 10);
-  if(status != HAL_OK){
-      Error_Handler();
-  }
+  printf("printf OK\r\n");
   /* USER CODE END 2 */
 
   /* Infinite loop */

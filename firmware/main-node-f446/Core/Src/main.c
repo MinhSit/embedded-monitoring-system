@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include "log/log.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,7 +32,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define UART_TIME_OUT 100U
+/* ~11 bytes/ms at 115200 baud -> 100 ms covers ~1 KB per printf call */
+#define UART_TX_TIMEOUT_MS 100U
 #define BOARD_NAME "NUCLEO-F446RE"
 #define FIRMWARE_VERSION "0.1.0"
 /* USER CODE END PD */
@@ -62,7 +64,7 @@ int _write(int file, char *ptr, int len)
 {
     (void) file;
     HAL_StatusTypeDef status;
-    status = HAL_UART_Transmit(&huart2, (const uint8_t *) ptr, len, UART_TIME_OUT);
+    status = HAL_UART_Transmit(&huart2, (const uint8_t *) ptr, len, UART_TX_TIMEOUT_MS);
     if(status != HAL_OK){
         return -1;
     }
@@ -106,7 +108,7 @@ int main(void)
   printf("Board    : %s\r\n", BOARD_NAME);
   printf("Firmware : %s\r\n", FIRMWARE_VERSION);
   printf("=================================\r\n");
-  printf("Boot OK\r\n");
+  log_write(LOG_LEVEL_INFO, "Boot OK");
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -116,10 +118,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-      HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-      HAL_Delay(500);
-      HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
-      HAL_Delay(500);
+    HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+    HAL_Delay(500);
+    HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+    HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }

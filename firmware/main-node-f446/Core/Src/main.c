@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include "log/log.h"
+#include "drivers/mpu6050/mpu6050.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -36,9 +37,6 @@
 #define UART_TX_TIMEOUT_MS    100U
 #define BOARD_NAME            "NUCLEO-F446RE"
 #define FIRMWARE_VERSION      "0.1.0"
-#define MPU6050_I2C_ADDR      0x68U
-#define MPU6050_REG_WHO_AM_I  0x75U
-#define I2C_TIMEOUT_MS        100U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -118,15 +116,8 @@ int main(void)
   log_write(LOG_LEVEL_INFO, "Boot OK");
 
   uint8_t who_am_i = 0;
-  HAL_StatusTypeDef st = HAL_I2C_Mem_Read(
-          &hi2c1,
-          MPU6050_I2C_ADDR << 1,
-          MPU6050_REG_WHO_AM_I,
-          I2C_MEMADD_SIZE_8BIT,
-          &who_am_i,
-          1,
-          I2C_TIMEOUT_MS);
-  if(st != HAL_OK){
+  mpu6050_status_t st = mpu6050_read_who_am_i(&hi2c1, &who_am_i);
+  if(st != MPU6050_OK){
       log_write(LOG_LEVEL_ERROR, "MPU6050 read failed");
   }
   else{

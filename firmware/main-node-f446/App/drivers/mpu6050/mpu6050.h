@@ -15,4 +15,16 @@ mpu6050_status_t mpu6050_read_who_am_i(I2C_HandleTypeDef *hi2c, uint8_t *who_am_
 
 mpu6050_status_t mpu6050_init(I2C_HandleTypeDef *hi2c);
 
+typedef struct {
+    int16_t accel_x;
+    int16_t accel_y;
+    int16_t accel_z;
+    int16_t temp;
+    int16_t gyro_x;
+    int16_t gyro_y;
+    int16_t gyro_z;
+} mpu6050_raw_t;
+
+mpu6050_status_t mpu6050_read_raw(I2C_HandleTypeDef *hi2c, mpu6050_raw_t *out);
+
 #endif /* MPU6050_H */

@@ -133,6 +133,24 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    mpu6050_raw_t raw;
+    mpu6050_status_t status = mpu6050_read_raw(&hi2c1, &raw);
+    if(status != MPU6050_OK){
+        char err[32];
+        snprintf(err, sizeof(err), "MPU6050 read failed %d", (int)status);
+        log_write(LOG_LEVEL_ERROR, err);
+
+    }else{
+        char msg[100]; /* 6 x ("AX=" + "-32768") + 5 spaces + '\0' = 60 */
+        snprintf(msg, sizeof(msg), "AX=%d AY=%d AZ=%d GX=%d GY=%d GZ=%d",
+                raw.accel_x,
+                raw.accel_y,
+                raw.accel_z,
+                raw.gyro_x,
+                raw.gyro_y,
+                raw.gyro_z);
+        log_write(LOG_LEVEL_INFO, msg);
+    }
     HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
     HAL_Delay(500);
     HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);

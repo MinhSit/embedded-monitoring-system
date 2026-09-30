@@ -115,15 +115,14 @@ int main(void)
   printf("=================================\r\n");
   log_write(LOG_LEVEL_INFO, "Boot OK");
 
-  uint8_t who_am_i = 0;
-  mpu6050_status_t st = mpu6050_read_who_am_i(&hi2c1, &who_am_i);
+  mpu6050_status_t st = mpu6050_init(&hi2c1);
   if(st != MPU6050_OK){
-      log_write(LOG_LEVEL_ERROR, "MPU6050 read failed");
+      char msg[32];
+      snprintf(msg, sizeof(msg), "MPU6050 init failed: %d", (int)st);
+      log_write(LOG_LEVEL_ERROR, msg);
   }
   else{
-      char msg[32];
-      snprintf(msg, sizeof(msg), "WHO_AM_I = 0x%02X", who_am_i);
-      log_write(LOG_LEVEL_INFO, msg);
+      log_write(LOG_LEVEL_INFO, "MPU6050 init OK");
   }
   /* USER CODE END 2 */
 

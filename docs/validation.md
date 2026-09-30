@@ -11,3 +11,11 @@
 - Register: 0x75 (WHO_AM_I)
 - Returned value: 0x68
 - Sequence: S, addr W, ACK, reg, ACK, Sr, addr R, ACK, data, NACK, P
+
+## I2C — MPU6050 init (WHO_AM_I check + wake-up)
+
+![I2C init](images/i2c_mpu6050_init.png)
+
+- Transaction 1: read WHO_AM_I (0x75) → 0x68
+- Transaction 2: write PWR_MGMT_1 (0x6B) = 0x00 → clear SLEEP bit
+- All bytes ACKed by sensor

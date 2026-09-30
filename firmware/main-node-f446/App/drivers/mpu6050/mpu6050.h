@@ -13,4 +13,6 @@ typedef enum {
 
 mpu6050_status_t mpu6050_read_who_am_i(I2C_HandleTypeDef *hi2c, uint8_t *who_am_i);
 
+mpu6050_status_t mpu6050_init(I2C_HandleTypeDef *hi2c);
+
 #endif /* MPU6050_H */

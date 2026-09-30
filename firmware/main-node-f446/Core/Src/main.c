@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include "log/log.h"
 #include "drivers/mpu6050/mpu6050.h"
+#include "drivers/w25q64/w25q64.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -119,15 +120,34 @@ int main(void)
   printf("=================================\r\n");
   log_write(LOG_LEVEL_INFO, "Boot OK");
 
-  mpu6050_status_t st = mpu6050_init(&hi2c1);
-  if(st != MPU6050_OK){
+  mpu6050_status_t mpu_st = mpu6050_init(&hi2c1);
+  if(mpu_st != MPU6050_OK){
       char msg[32];
-      snprintf(msg, sizeof(msg), "MPU6050 init failed: %d", (int)st);
+      snprintf(msg, sizeof(msg), "MPU6050 init failed: %d", (int)mpu_st);
       log_write(LOG_LEVEL_ERROR, msg);
   }
   else{
       log_write(LOG_LEVEL_INFO, "MPU6050 init OK");
   }
+
+  const w25q64_t flash = {
+      .hspi    = &hspi1,
+      .cs_port = FLASH_CS_GPIO_Port,
+      .cs_pin  = FLASH_CS_Pin
+  };
+  uint8_t flash_id[3];
+  w25q64_status_t flash_st = w25q64_read_jedec_id(&flash, flash_id);
+  if(flash_st != W25Q64_OK){
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 JEDEC read failed: %d", (int)flash_st);
+      log_write(LOG_LEVEL_ERROR, msg);
+  }
+  else{
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 JEDEC ID: %02X %02X %02X", flash_id[0], flash_id[1], flash_id[2]);
+      log_write(LOG_LEVEL_INFO, msg);
+  }
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -138,12 +158,11 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     mpu6050_raw_t raw;
-    mpu6050_status_t status = mpu6050_read_raw(&hi2c1, &raw);
-    if(status != MPU6050_OK){
-        char err[32];
-        snprintf(err, sizeof(err), "MPU6050 read failed %d", (int)status);
-        log_write(LOG_LEVEL_ERROR, err);
-
+    mpu6050_status_t mpu_st = mpu6050_read_raw(&hi2c1, &raw);
+    if(mpu_st != MPU6050_OK){
+        char msg[32];
+        snprintf(msg, sizeof(msg), "MPU6050 read failed %d", (int)mpu_st);
+        log_write(LOG_LEVEL_ERROR, msg);
     }
     else{
         char msg[100]; /* 6 x ("AX=" + "-32768") + 5 spaces + '\0' = 60, 100 for headroom */

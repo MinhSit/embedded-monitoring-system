@@ -1,9 +1,6 @@
 #ifndef W25Q64_H
 #define W25Q64_H
 
-#define W25Q64_SR1_BUSY   (1u << 0)
-#define W25Q64_SR1_WEL    (1u << 1)
-
 #include <stdint.h>
 #include "stm32f4xx_hal.h"
 

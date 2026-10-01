@@ -3,6 +3,8 @@
 #define W25Q64_CMD_JEDEC_ID     0x9F
 #define W25Q64_SPI_TIMEOUT_MS   100
 #define W25Q64_CMD_READ_SR1     0x05
+#define W25Q64_SR1_BUSY         (1u << 0)
+#define W25Q64_SR1_WEL          (1u << 1)
 
 static w25q64_status_t to_status(HAL_StatusTypeDef st)
 {
@@ -60,8 +62,18 @@ w25q64_status_t w25q64_read_status(const w25q64_t *dev, uint8_t *sr1)
 
 w25q64_status_t w25q64_wait_busy(const w25q64_t *dev, uint32_t timeout_ms)
 {
-    // TODO: lấy mốc thời gian bằng HAL_GetTick()
-    // TODO: vòng lặp: đọc status, lỗi bus -> return ngay; BUSY = 0 -> OK
-    // TODO: hết timeout_ms -> W25Q64_ERR_TIMEOUT
-    return W25Q64_OK;
+    uint32_t start_tick = HAL_GetTick();
+    uint8_t sr1;
+    while(1){
+        w25q64_status_t st = w25q64_read_status(dev, &sr1);
+        if(st != W25Q64_OK){
+            return st;
+        }
+        if((sr1 & (uint8_t)W25Q64_SR1_BUSY) == 0){
+            return W25Q64_OK;
+        }
+        if(HAL_GetTick()  - start_tick > timeout_ms){
+            return W25Q64_ERR_TIMEOUT;
+        }
+    }
 }

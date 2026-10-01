@@ -159,6 +159,15 @@ int main(void)
       snprintf(msg, sizeof(msg), "W25Q64 status: %02X", sr1);
       log_write(LOG_LEVEL_INFO, msg);
   }
+  flash_st = w25q64_wait_busy(&flash, 10);
+  if(flash_st != W25Q64_OK){
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 wait busy failed: %d", (int)flash_st);
+      log_write(LOG_LEVEL_ERROR, msg);
+  }
+  else{
+      log_write(LOG_LEVEL_INFO, "W25Q64 ready (not busy)");
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */

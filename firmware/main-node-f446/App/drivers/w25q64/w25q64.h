@@ -7,7 +7,8 @@
 typedef enum{
     W25Q64_OK = 0,
     W25Q64_ERR_BUS,
-    W25Q64_ERR_TIMEOUT
+    W25Q64_ERR_TIMEOUT,
+    W25Q64_ERR_PARAM
 } w25q64_status_t;
 
 typedef struct {
@@ -28,6 +29,10 @@ w25q64_status_t w25q64_wait_busy(const w25q64_t *dev, uint32_t timeout_ms);
 w25q64_status_t w25q64_write_enable(const w25q64_t *dev);
 
 w25q64_status_t w25q64_sector_erase(const w25q64_t *dev, uint32_t addr);
+
+w25q64_status_t w25q64_page_program(const w25q64_t *dev, uint32_t addr, const uint8_t *data, uint16_t len);
+
+w25q64_status_t w25q64_read_data(const w25q64_t *dev, uint32_t addr, uint8_t *data, uint16_t len);
 
 #endif /* W25Q64 */
 

@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <string.h>
 #include "log/log.h"
 #include "drivers/mpu6050/mpu6050.h"
 #include "drivers/w25q64/w25q64.h"
@@ -211,6 +212,56 @@ int main(void)
       char msg[50];
       snprintf(msg, sizeof(msg), "W25Q64 SR1 (after erase): %02X", sr1);
       log_write(LOG_LEVEL_INFO, msg);
+  }
+  uint8_t wr_buf[4] = {0xDE, 0xAD, 0xBE, 0xEF};  // nội dung muốn GHI vào flash
+  uint8_t rd_buf[4] = {0};                       // chỗ trống để NHẬN data đọc ra
+  flash_st = w25q64_read_data(&flash, 0x000000, rd_buf, 4);
+  if(flash_st != W25Q64_OK){
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 read data failed: %d", (int)flash_st);
+      log_write(LOG_LEVEL_ERROR, msg);
+  }
+  else{
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 read (erased): %02X %02X %02X %02X",
+               rd_buf[0], rd_buf[1], rd_buf[2], rd_buf[3]);
+      log_write(LOG_LEVEL_INFO, msg);
+  }
+  flash_st = w25q64_page_program(&flash, 0x000000, wr_buf, 4);
+  if(flash_st != W25Q64_OK){
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 page program failed: %d", (int)flash_st);
+      log_write(LOG_LEVEL_ERROR, msg);
+  }
+  else{
+      log_write(LOG_LEVEL_INFO, "W25Q64 page program ok");
+  }
+  flash_st = w25q64_read_data(&flash, 0x000000, rd_buf, 4);
+  if(flash_st != W25Q64_OK){
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 read data failed: %d", (int)flash_st);
+      log_write(LOG_LEVEL_ERROR, msg);
+  }
+  else{
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 read back: %02X %02X %02X %02X",
+               rd_buf[0], rd_buf[1], rd_buf[2], rd_buf[3]);
+      log_write(LOG_LEVEL_INFO, msg);
+  }
+  if(memcmp(wr_buf, rd_buf, sizeof(wr_buf)) == 0){
+      log_write(LOG_LEVEL_INFO, "W25Q64 verify: PASS");
+  }
+  else{
+      log_write(LOG_LEVEL_ERROR, "W25Q64 verify: FAIL");
+  }
+  flash_st = w25q64_page_program(&flash, 0x0000FE, wr_buf, 4);
+  if(flash_st == W25Q64_ERR_PARAM){
+      log_write(LOG_LEVEL_INFO, "W25Q64 cross-page reject: PASS");
+  }
+  else{
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 cross-page reject: FAIL (%d)", (int)flash_st);
+      log_write(LOG_LEVEL_ERROR, msg);
   }
   /* USER CODE END 2 */
 

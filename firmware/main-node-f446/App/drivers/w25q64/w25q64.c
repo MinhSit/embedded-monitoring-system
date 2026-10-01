@@ -8,6 +8,11 @@
 #define W25Q64_SR1_WEL          (1u << 1)
 #define W25Q64_CMD_SECTOR_ERASE         0x20
 #define W25Q64_SECTOR_ERASE_TIMEOUT_MS  400   /* tSE max, datasheet */
+#define W25Q64_CMD_PAGE_PROGRAM         0x02
+#define W25Q64_PAGE_SIZE                256U
+#define W25Q64_PAGE_PROGRAM_TIMEOUT_MS  5     /* tPP max 3 ms + tick margin */
+#define W25Q64_CAPACITY          0x800000UL   /* 8 MB = 64 Mbit */
+#define W25Q64_CMD_READ_DATA     0x03
 
 static w25q64_status_t to_status(HAL_StatusTypeDef st)
 {
@@ -108,4 +113,57 @@ w25q64_status_t w25q64_sector_erase(const w25q64_t *dev, uint32_t addr)
     }
     st = w25q64_wait_busy(dev, W25Q64_SECTOR_ERASE_TIMEOUT_MS);
     return st;
+}
+
+w25q64_status_t w25q64_page_program(const w25q64_t *dev, uint32_t addr,
+                                    const uint8_t *data, uint16_t len)
+{
+    uint32_t offset = addr & 0xFF;
+    uint32_t remaining = W25Q64_PAGE_SIZE - offset;
+    if(len == 0 || data == NULL || addr >= W25Q64_CAPACITY || len > remaining){
+        return W25Q64_ERR_PARAM;
+    }
+    w25q64_status_t st = w25q64_write_enable(dev);
+    if(st != W25Q64_OK){
+        return st;
+    }
+    uint8_t tx[4] = {W25Q64_CMD_PAGE_PROGRAM, 0x00, 0x00, 0x00};
+    tx[1] = (addr >> 16) & 0xFF;
+    tx[2] = (addr >> 8) & 0xFF;
+    tx[3] = addr & 0xFF;
+    cs_select(dev);
+    HAL_StatusTypeDef hal_st = HAL_SPI_Transmit(dev->hspi, tx, sizeof(tx), W25Q64_SPI_TIMEOUT_MS);
+    if(hal_st != HAL_OK){
+        cs_deselect(dev);
+        return to_status(hal_st);
+    }
+    hal_st = HAL_SPI_Transmit(dev->hspi, data, len, W25Q64_SPI_TIMEOUT_MS);
+    cs_deselect(dev);
+    if(hal_st != HAL_OK){
+        return to_status(hal_st);
+    }
+    st = w25q64_wait_busy(dev, W25Q64_PAGE_PROGRAM_TIMEOUT_MS);
+    return st;
+}
+
+w25q64_status_t w25q64_read_data(const w25q64_t *dev, uint32_t addr, uint8_t *data, uint16_t len){
+    if(len == 0 || data == NULL || addr >= W25Q64_CAPACITY || len > W25Q64_CAPACITY - addr){
+        return W25Q64_ERR_PARAM;
+    }
+    uint8_t tx[4] = {W25Q64_CMD_READ_DATA, 0x00, 0x00, 0x00};
+    tx[1] = (addr >> 16) & 0xFF;
+    tx[2] = (addr >> 8) & 0xFF;
+    tx[3] = addr & 0xFF;
+    cs_select(dev);
+    HAL_StatusTypeDef hal_st = HAL_SPI_Transmit(dev->hspi, tx, sizeof(tx), W25Q64_SPI_TIMEOUT_MS);
+    if(hal_st != HAL_OK){
+        cs_deselect(dev);
+        return to_status(hal_st);
+    }
+    hal_st = HAL_SPI_Receive(dev->hspi, data, len, W25Q64_SPI_TIMEOUT_MS);
+    cs_deselect(dev);
+    if(hal_st != HAL_OK){
+        return to_status(hal_st);
+    }
+    return W25Q64_OK;
 }

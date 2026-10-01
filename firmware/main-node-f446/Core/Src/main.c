@@ -39,6 +39,7 @@
 #define UART_TX_TIMEOUT_MS    100U
 #define BOARD_NAME            "NUCLEO-F446RE"
 #define FIRMWARE_VERSION      "0.1.0"
+#define W25Q64_TEST_LEN   256U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -78,6 +79,44 @@ int _write(int file, char *ptr, int len)
         return -1;
     }
     return len;
+}
+
+static int flash_pattern_test(const w25q64_t *dev, uint32_t addr,
+                              const uint8_t *pattern, const char *name)
+{
+    uint8_t chk_buf[W25Q64_TEST_LEN] = {0};
+    w25q64_status_t st;
+    st = w25q64_sector_erase(dev, addr);
+    if(st != W25Q64_OK){
+        char msg[64];
+        snprintf(msg, sizeof(msg), "W25Q64 pattern %s erase failed: %d", name, (int)st);
+        log_write(LOG_LEVEL_ERROR, msg);
+        return 0;
+    }
+    st = w25q64_page_program(dev, addr, pattern, W25Q64_TEST_LEN);
+    if(st != W25Q64_OK){
+        char msg[64];
+        snprintf(msg, sizeof(msg), "W25Q64 pattern %s program failed: %d", name, (int)st);
+        log_write(LOG_LEVEL_ERROR, msg);
+        return 0;
+    }
+    st = w25q64_read_data(dev, addr, chk_buf, W25Q64_TEST_LEN);
+    if(st != W25Q64_OK){
+        char msg[64];
+        snprintf(msg, sizeof(msg), "W25Q64 pattern %s read data failed: %d", name, (int)st);
+        log_write(LOG_LEVEL_ERROR, msg);
+        return 0;
+    }
+    if(memcmp(pattern, chk_buf, W25Q64_TEST_LEN) != 0){
+        char msg[64];
+        snprintf(msg, sizeof(msg), "W25Q64 pattern %s: FAIL", name);
+        log_write(LOG_LEVEL_ERROR, msg);
+        return 0;
+    }
+    char msg[64];
+    snprintf(msg, sizeof(msg), "W25Q64 pattern %s: PASS", name);
+    log_write(LOG_LEVEL_INFO, msg);
+    return 1;
 }
 /* USER CODE END 0 */
 
@@ -263,6 +302,21 @@ int main(void)
       snprintf(msg, sizeof(msg), "W25Q64 cross-page reject: FAIL (%d)", (int)flash_st);
       log_write(LOG_LEVEL_ERROR, msg);
   }
+  uint8_t pat_buf[W25Q64_TEST_LEN];
+  int pass_cnt = 0;
+  memset(pat_buf, 0x00, sizeof(pat_buf));
+  pass_cnt += flash_pattern_test(&flash, 0x000000, pat_buf, "0x00");
+  memset(pat_buf, 0x55, sizeof(pat_buf));
+  pass_cnt += flash_pattern_test(&flash, 0x000000, pat_buf, "0x55");
+  memset(pat_buf, 0xAA, sizeof(pat_buf));
+  pass_cnt += flash_pattern_test(&flash, 0x000000, pat_buf, "0xAA");
+  for(uint16_t i = 0; i < sizeof(pat_buf); i++){
+      pat_buf[i] = (uint8_t)i;
+  }
+  pass_cnt += flash_pattern_test(&flash, 0x000000, pat_buf, "incremental");
+  char msg[64];
+  snprintf(msg, sizeof(msg), "W25Q64 pattern summary: %d/4 PASS", pass_cnt);
+  log_write(LOG_LEVEL_INFO, msg);
   /* USER CODE END 2 */
 
   /* Infinite loop */

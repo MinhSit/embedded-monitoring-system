@@ -1,6 +1,9 @@
 #ifndef W25Q64_H
 #define W25Q64_H
 
+#define W25Q64_SR1_BUSY   (1u << 0)
+#define W25Q64_SR1_WEL    (1u << 1)
+
 #include <stdint.h>
 #include "stm32f4xx_hal.h"
 
@@ -18,6 +21,12 @@ typedef struct {
 
 /* Reads 3 bytes: manufacturer, memory type, capacity. */
 w25q64_status_t w25q64_read_jedec_id(const w25q64_t *dev, uint8_t id[3]);
+
+/* Reads Status Register-1. */
+w25q64_status_t w25q64_read_status(const w25q64_t *dev, uint8_t *sr1);
+
+/* Polls BUSY until it clears or timeout_ms elapses. */
+w25q64_status_t w25q64_wait_busy(const w25q64_t *dev, uint32_t timeout_ms);
 
 #endif /* W25Q64 */
 

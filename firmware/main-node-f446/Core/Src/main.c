@@ -147,7 +147,18 @@ int main(void)
       snprintf(msg, sizeof(msg), "W25Q64 JEDEC ID: %02X %02X %02X", flash_id[0], flash_id[1], flash_id[2]);
       log_write(LOG_LEVEL_INFO, msg);
   }
-
+  uint8_t sr1;
+  flash_st = w25q64_read_status(&flash, &sr1);
+  if(flash_st != W25Q64_OK){
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 status read failed: %d", (int)flash_st);
+      log_write(LOG_LEVEL_ERROR, msg);
+  }
+  else{
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 status: %02X", sr1);
+      log_write(LOG_LEVEL_INFO, msg);
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */

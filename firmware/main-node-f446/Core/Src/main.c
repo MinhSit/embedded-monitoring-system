@@ -151,12 +151,12 @@ int main(void)
   flash_st = w25q64_read_status(&flash, &sr1);
   if(flash_st != W25Q64_OK){
       char msg[50];
-      snprintf(msg, sizeof(msg), "W25Q64 status read failed: %d", (int)flash_st);
+      snprintf(msg, sizeof(msg), "W25Q64 SR1 read failed: %d", (int)flash_st);
       log_write(LOG_LEVEL_ERROR, msg);
   }
   else{
       char msg[50];
-      snprintf(msg, sizeof(msg), "W25Q64 status: %02X", sr1);
+      snprintf(msg, sizeof(msg), "W25Q64 SR1 (boot): %02X", sr1);
       log_write(LOG_LEVEL_INFO, msg);
   }
   flash_st = w25q64_wait_busy(&flash, 10);
@@ -168,6 +168,27 @@ int main(void)
   else{
       log_write(LOG_LEVEL_INFO, "W25Q64 ready (not busy)");
   }
+  flash_st = w25q64_write_enable(&flash);
+  if(flash_st != W25Q64_OK){
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 WREN failed: %d", (int)flash_st);
+      log_write(LOG_LEVEL_ERROR, msg);
+  }
+  else{
+      log_write(LOG_LEVEL_INFO, "W25Q64 WREN sent");
+  }
+  flash_st = w25q64_read_status(&flash, &sr1);
+  if(flash_st != W25Q64_OK){
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 SR1 read failed: %d", (int)flash_st);
+      log_write(LOG_LEVEL_ERROR, msg);
+  }
+  else{
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 SR1 (after WREN): %02X", sr1);
+      log_write(LOG_LEVEL_INFO, msg);
+  }
+
   /* USER CODE END 2 */
 
   /* Infinite loop */

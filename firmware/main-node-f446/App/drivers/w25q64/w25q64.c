@@ -3,6 +3,7 @@
 #define W25Q64_CMD_JEDEC_ID     0x9F
 #define W25Q64_SPI_TIMEOUT_MS   100
 #define W25Q64_CMD_READ_SR1     0x05
+#define W25Q64_CMD_WRITE_ENABLE 0x06
 #define W25Q64_SR1_BUSY         (1u << 0)
 #define W25Q64_SR1_WEL          (1u << 1)
 
@@ -76,4 +77,13 @@ w25q64_status_t w25q64_wait_busy(const w25q64_t *dev, uint32_t timeout_ms)
             return W25Q64_ERR_TIMEOUT;
         }
     }
+}
+
+w25q64_status_t w25q64_write_enable(const w25q64_t *dev)
+{
+    uint8_t tx[1] = {W25Q64_CMD_WRITE_ENABLE};
+    cs_select(dev);
+    HAL_StatusTypeDef st = HAL_SPI_Transmit(dev->hspi, tx, sizeof(tx), W25Q64_SPI_TIMEOUT_MS);
+    cs_deselect(dev);
+    return to_status(st);
 }

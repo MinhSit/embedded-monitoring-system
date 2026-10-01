@@ -25,5 +25,7 @@ w25q64_status_t w25q64_read_status(const w25q64_t *dev, uint8_t *sr1);
 /* Polls BUSY until it clears or timeout_ms elapses. */
 w25q64_status_t w25q64_wait_busy(const w25q64_t *dev, uint32_t timeout_ms);
 
+w25q64_status_t w25q64_write_enable(const w25q64_t *dev);
+
 #endif /* W25Q64 */
 

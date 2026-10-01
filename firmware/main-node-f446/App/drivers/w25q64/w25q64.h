@@ -27,5 +27,7 @@ w25q64_status_t w25q64_wait_busy(const w25q64_t *dev, uint32_t timeout_ms);
 
 w25q64_status_t w25q64_write_enable(const w25q64_t *dev);
 
+w25q64_status_t w25q64_sector_erase(const w25q64_t *dev, uint32_t addr);
+
 #endif /* W25Q64 */
 

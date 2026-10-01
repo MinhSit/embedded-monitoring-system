@@ -188,7 +188,30 @@ int main(void)
       snprintf(msg, sizeof(msg), "W25Q64 SR1 (after WREN): %02X", sr1);
       log_write(LOG_LEVEL_INFO, msg);
   }
-
+  uint32_t start_tick = HAL_GetTick();
+  flash_st = w25q64_sector_erase(&flash, 0x000000);
+  if(flash_st != W25Q64_OK){
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 sector erase failed: %d", (int)flash_st);
+      log_write(LOG_LEVEL_ERROR, msg);
+  }
+  else{
+      char msg[50];
+      uint32_t erase_ms = HAL_GetTick() - start_tick;
+      snprintf(msg, sizeof(msg), "W25Q64 erase OK: %lu ms", erase_ms);
+      log_write(LOG_LEVEL_INFO, msg);
+  }
+  flash_st = w25q64_read_status(&flash, &sr1);
+  if(flash_st != W25Q64_OK){
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 SR1 read failed: %d", (int)flash_st);
+      log_write(LOG_LEVEL_ERROR, msg);
+  }
+  else{
+      char msg[50];
+      snprintf(msg, sizeof(msg), "W25Q64 SR1 (after erase): %02X", sr1);
+      log_write(LOG_LEVEL_INFO, msg);
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */

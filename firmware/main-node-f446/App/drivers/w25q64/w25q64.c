@@ -6,6 +6,8 @@
 #define W25Q64_CMD_WRITE_ENABLE 0x06
 #define W25Q64_SR1_BUSY         (1u << 0)
 #define W25Q64_SR1_WEL          (1u << 1)
+#define W25Q64_CMD_SECTOR_ERASE         0x20
+#define W25Q64_SECTOR_ERASE_TIMEOUT_MS  400   /* tSE max, datasheet */
 
 static w25q64_status_t to_status(HAL_StatusTypeDef st)
 {
@@ -86,4 +88,24 @@ w25q64_status_t w25q64_write_enable(const w25q64_t *dev)
     HAL_StatusTypeDef st = HAL_SPI_Transmit(dev->hspi, tx, sizeof(tx), W25Q64_SPI_TIMEOUT_MS);
     cs_deselect(dev);
     return to_status(st);
+}
+
+w25q64_status_t w25q64_sector_erase(const w25q64_t *dev, uint32_t addr)
+{
+    w25q64_status_t st = w25q64_write_enable(dev);
+    if(st != W25Q64_OK){
+        return st;
+    }
+    uint8_t tx[4] = {W25Q64_CMD_SECTOR_ERASE, 0x00, 0x00, 0x00};
+    tx[1] = (addr >> 16) & 0xFF;
+    tx[2] = (addr >> 8) & 0xFF;
+    tx[3] = addr & 0xFF;
+    cs_select(dev);
+    HAL_StatusTypeDef hal_st = HAL_SPI_Transmit(dev->hspi, tx, sizeof(tx), W25Q64_SPI_TIMEOUT_MS);
+    cs_deselect(dev);
+    if(hal_st != HAL_OK){
+        return to_status(hal_st);
+    }
+    st = w25q64_wait_busy(dev, W25Q64_SECTOR_ERASE_TIMEOUT_MS);
+    return st;
 }

@@ -31,7 +31,11 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+typedef struct {
+    uint32_t      seq;   /* số thứ tự mẫu, tăng 1 mỗi lần đọc OK */
+    uint32_t      tick;  /* osKernelGetTickCount() lúc đọc */
+    mpu6050_raw_t raw;   /* 7 x int16_t: accel xyz, temp, gyro xyz */
+} sample_t;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -44,6 +48,7 @@
 #define HEARTBEAT_PERIOD_MS 1000U
 #define ACQ_PERIOD_MS 100U
 #define ACQ_LOG_EVERY 10U
+#define SAMPLE_QUEUE_DEPTH 16U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -72,8 +77,15 @@ const osThreadAttr_t acquisition_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
+/* Definitions for storage */
+osThreadId_t storageHandle;
+const osThreadAttr_t storage_attributes = {
+  .name = "storage",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
 /* USER CODE BEGIN PV */
-
+osMessageQueueId_t sample_queue;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -84,6 +96,7 @@ static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 void heartbeat_task(void *argument);
 void acquisition_task(void *argument);
+void storage_task(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -357,6 +370,17 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
+  sample_queue = osMessageQueueNew(SAMPLE_QUEUE_DEPTH, sizeof(sample_t), NULL);
+  if(sample_queue == NULL){
+    log_write(LOG_LEVEL_ERROR, "sample queue NULL");
+  }
+  else{
+    char msg[64];
+    snprintf(msg, sizeof(msg), "sample queue OK, count=%u, item_size=%u B",
+            (unsigned)SAMPLE_QUEUE_DEPTH,
+            (unsigned)sizeof(sample_t));
+    log_write(LOG_LEVEL_INFO, msg);
+  }
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -365,6 +389,9 @@ int main(void)
 
   /* creation of acquisition */
   acquisitionHandle = osThreadNew(acquisition_task, NULL, &acquisition_attributes);
+
+  /* creation of storage */
+  storageHandle = osThreadNew(storage_task, NULL, &storage_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -625,25 +652,19 @@ void acquisition_task(void *argument)
   /* Infinite loop */
   for(;;)
   {
-      mpu6050_raw_t raw;
-      mpu6050_status_t mpu_st = mpu6050_read_raw(&hi2c1, &raw);
+      sample_t s;
+      s.seq = sample_cnt;
+      s.tick = osKernelGetTickCount();
+      mpu6050_status_t mpu_st = mpu6050_read_raw(&hi2c1, &s.raw);
       if(mpu_st != MPU6050_OK){
           char msg[32];
           snprintf(msg, sizeof(msg), "MPU6050 read failed %d", (int)mpu_st);
           log_write(LOG_LEVEL_ERROR, msg);
       }
       else{
-          if(sample_cnt % ACQ_LOG_EVERY == 0){
-              char msg[100]; /* 6 x ("AX=" + "-32768") + 5 spaces + '\0' = 60, 100 for headroom */
-              snprintf(msg, sizeof(msg), "s=%lu AX=%d AY=%d AZ=%d GX=%d GY=%d GZ=%d",
-                      sample_cnt,
-                      raw.accel_x,
-                      raw.accel_y,
-                      raw.accel_z,
-                      raw.gyro_x,
-                      raw.gyro_y,
-                      raw.gyro_z);
-              log_write(LOG_LEVEL_INFO, msg);
+          osStatus_t os_st = osMessageQueuePut(sample_queue, &s, 0, 0);
+          if(os_st != osOK){
+              log_write(LOG_LEVEL_ERROR, "queue full");
           }
           sample_cnt++;
       }
@@ -651,6 +672,31 @@ void acquisition_task(void *argument)
       osDelayUntil(next_wake);
   }
   /* USER CODE END acquisition_task */
+}
+
+/* USER CODE BEGIN Header_storage_task */
+/**
+* @brief Function implementing the storage thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_storage_task */
+void storage_task(void *argument)
+{
+  /* USER CODE BEGIN storage_task */
+  sample_t s;
+  osStatus_t st;
+  /* Infinite loop */
+  for(;;)
+  {
+    st = osMessageQueueGet(sample_queue, &s, NULL, osWaitForever);
+    if(st == osOK && s.seq % ACQ_LOG_EVERY == 0){
+        char msg[50];
+        snprintf(msg, sizeof(msg), "q seq=%lu t=%lu AZ=%d", s.seq, s.tick, s.raw.accel_z);
+        log_write(LOG_LEVEL_INFO, msg);
+    }
+  }
+  /* USER CODE END storage_task */
 }
 
 /**

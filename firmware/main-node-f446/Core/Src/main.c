@@ -42,6 +42,8 @@
 #define FIRMWARE_VERSION      "0.1.0"
 #define W25Q64_TEST_LEN   256U
 #define HEARTBEAT_PERIOD_MS 1000U
+#define ACQ_PERIOD_MS 100U
+#define ACQ_LOG_EVERY 10U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -63,6 +65,13 @@ const osThreadAttr_t heartbeat_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for acquisition */
+osThreadId_t acquisitionHandle;
+const osThreadAttr_t acquisition_attributes = {
+  .name = "acquisition",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -74,6 +83,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 void heartbeat_task(void *argument);
+void acquisition_task(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -353,6 +363,9 @@ int main(void)
   /* creation of heartbeat */
   heartbeatHandle = osThreadNew(heartbeat_task, NULL, &heartbeat_attributes);
 
+  /* creation of acquisition */
+  acquisitionHandle = osThreadNew(acquisition_task, NULL, &acquisition_attributes);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -373,25 +386,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    mpu6050_raw_t raw;
-    mpu6050_status_t mpu_st = mpu6050_read_raw(&hi2c1, &raw);
-    if(mpu_st != MPU6050_OK){
-        char msg[32];
-        snprintf(msg, sizeof(msg), "MPU6050 read failed %d", (int)mpu_st);
-        log_write(LOG_LEVEL_ERROR, msg);
-    }
-    else{
-        char msg[100]; /* 6 x ("AX=" + "-32768") + 5 spaces + '\0' = 60, 100 for headroom */
-        snprintf(msg, sizeof(msg), "AX=%d AY=%d AZ=%d GX=%d GY=%d GZ=%d",
-                raw.accel_x,
-                raw.accel_y,
-                raw.accel_z,
-                raw.gyro_x,
-                raw.gyro_y,
-                raw.gyro_z);
-        log_write(LOG_LEVEL_INFO, msg);
-    }
-    HAL_Delay(1000);
   }
   /* USER CODE END 3 */
 }
@@ -614,6 +608,49 @@ void heartbeat_task(void *argument)
     beat++;
   }
   /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_acquisition_task */
+/**
+* @brief Function implementing the acquisition thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_acquisition_task */
+void acquisition_task(void *argument)
+{
+  /* USER CODE BEGIN acquisition_task */
+  uint32_t sample_cnt = 0;
+  uint32_t next_wake = osKernelGetTickCount();
+  /* Infinite loop */
+  for(;;)
+  {
+      mpu6050_raw_t raw;
+      mpu6050_status_t mpu_st = mpu6050_read_raw(&hi2c1, &raw);
+      if(mpu_st != MPU6050_OK){
+          char msg[32];
+          snprintf(msg, sizeof(msg), "MPU6050 read failed %d", (int)mpu_st);
+          log_write(LOG_LEVEL_ERROR, msg);
+      }
+      else{
+          if(sample_cnt % ACQ_LOG_EVERY == 0){
+              char msg[100]; /* 6 x ("AX=" + "-32768") + 5 spaces + '\0' = 60, 100 for headroom */
+              snprintf(msg, sizeof(msg), "s=%lu AX=%d AY=%d AZ=%d GX=%d GY=%d GZ=%d",
+                      sample_cnt,
+                      raw.accel_x,
+                      raw.accel_y,
+                      raw.accel_z,
+                      raw.gyro_x,
+                      raw.gyro_y,
+                      raw.gyro_z);
+              log_write(LOG_LEVEL_INFO, msg);
+          }
+          sample_cnt++;
+      }
+      next_wake += ACQ_PERIOD_MS;
+      osDelayUntil(next_wake);
+  }
+  /* USER CODE END acquisition_task */
 }
 
 /**

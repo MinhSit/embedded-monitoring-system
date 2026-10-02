@@ -86,6 +86,7 @@ const osThreadAttr_t storage_attributes = {
 };
 /* USER CODE BEGIN PV */
 osMessageQueueId_t sample_queue;
+static volatile uint32_t sample_drop_cnt = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -624,11 +625,11 @@ void heartbeat_task(void *argument)
   /* USER CODE BEGIN 5 */
   uint32_t beat = 0;
   uint32_t next_wake = osKernelGetTickCount();
-  char msg[32];
+  char msg[50];
   /* Infinite loop */
   for(;;)
   {
-    snprintf(msg, sizeof(msg), "heartbeat %lu", beat);
+    snprintf(msg, sizeof(msg), "heartbeat %lu drops=%lu", beat, sample_drop_cnt);
     log_write(LOG_LEVEL_INFO, msg);
     next_wake += HEARTBEAT_PERIOD_MS;
     osDelayUntil(next_wake);
@@ -664,7 +665,7 @@ void acquisition_task(void *argument)
       else{
           osStatus_t os_st = osMessageQueuePut(sample_queue, &s, 0, 0);
           if(os_st != osOK){
-              log_write(LOG_LEVEL_ERROR, "queue full");
+              sample_drop_cnt++;
           }
           sample_cnt++;
       }

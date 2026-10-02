@@ -49,6 +49,10 @@ typedef struct {
 #define ACQ_PERIOD_MS 100U
 #define ACQ_LOG_EVERY 10U
 #define SAMPLE_QUEUE_DEPTH 16U
+#define FLASH_PAGE_SIZE   256U
+#define SAMPLES_PER_PAGE  (FLASH_PAGE_SIZE / sizeof(sample_t))   /* = 10 */
+#define LOG_START_ADDR  0x001000UL
+#define SECTOR_SIZE     4096UL
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -87,6 +91,11 @@ const osThreadAttr_t storage_attributes = {
 /* USER CODE BEGIN PV */
 osMessageQueueId_t sample_queue;
 static volatile uint32_t sample_drop_cnt = 0;
+static const w25q64_t flash = {
+    .hspi    = &hspi1,
+    .cs_port = FLASH_CS_GPIO_Port,
+    .cs_pin  = FLASH_CS_Pin
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -205,11 +214,6 @@ int main(void)
       log_write(LOG_LEVEL_INFO, "MPU6050 init OK");
   }
 
-  const w25q64_t flash = {
-      .hspi    = &hspi1,
-      .cs_port = FLASH_CS_GPIO_Port,
-      .cs_pin  = FLASH_CS_Pin
-  };
   uint8_t flash_id[3];
   w25q64_status_t flash_st = w25q64_read_jedec_id(&flash, flash_id);
   if(flash_st != W25Q64_OK){
@@ -687,14 +691,57 @@ void storage_task(void *argument)
   /* USER CODE BEGIN storage_task */
   sample_t s;
   osStatus_t st;
+  static sample_t page_buf[SAMPLES_PER_PAGE]; /* static: không chiếm stack 1 KB của task */
+  static uint8_t verify_buf[sizeof(page_buf)];
+  uint32_t page_cnt = 0;                      /* số sample đang có trong page_buf */
+  uint32_t write_addr = LOG_START_ADDR;   /* địa chỉ page tiếp theo sẽ ghi */
+  w25q64_status_t flash_st;
   /* Infinite loop */
   for(;;)
   {
     st = osMessageQueueGet(sample_queue, &s, NULL, osWaitForever);
-    if(st == osOK && s.seq % ACQ_LOG_EVERY == 0){
-        char msg[50];
-        snprintf(msg, sizeof(msg), "q seq=%lu t=%lu AZ=%d", s.seq, s.tick, s.raw.accel_z);
-        log_write(LOG_LEVEL_INFO, msg);
+    if(st == osOK){
+        page_buf[page_cnt] = s;
+        page_cnt++;
+        if(page_cnt == SAMPLES_PER_PAGE){
+            flash_st = W25Q64_OK;
+            if(write_addr % SECTOR_SIZE == 0){
+                flash_st = w25q64_sector_erase(&flash, write_addr);
+            }
+            if(flash_st == W25Q64_OK){                 /* erase lỗi thì bỏ qua program */
+                flash_st = w25q64_page_program(&flash, write_addr, (const uint8_t *)page_buf, sizeof(page_buf));
+            }
+            if(flash_st != W25Q64_OK){
+                char msg[50];
+                snprintf(msg, sizeof(msg), "W25Q64 write failed: %d addr=%06lX", (int)flash_st, write_addr);
+                log_write(LOG_LEVEL_ERROR, msg);
+            }
+            else{   /* ghi OK */
+                flash_st = w25q64_read_data(&flash, write_addr, verify_buf, sizeof(verify_buf));
+                if(flash_st != W25Q64_OK){
+                    char msg[50];
+                    snprintf(msg, sizeof(msg), "W25Q64 read back failed: %d", (int)flash_st);
+                    log_write(LOG_LEVEL_ERROR, msg);
+                }
+                else if(memcmp(verify_buf, page_buf, sizeof(page_buf)) != 0){
+                    /* log ERROR: page verify FAIL addr=... */
+                    char msg[50];
+                    snprintf(msg, sizeof(msg), "page verify FAIL addr=%06lX", write_addr);
+                    log_write(LOG_LEVEL_ERROR, msg);
+                }
+                else{
+                    /* log INFO: page full seq=a..b addr=... verify=OK */
+                    char msg[50];
+                    snprintf(msg, sizeof(msg), "page full seq=%lu..%lu addr=%06lX",
+                             page_buf[0].seq,
+                             page_buf[SAMPLES_PER_PAGE - 1].seq,
+                             write_addr);
+                    log_write(LOG_LEVEL_INFO, msg);
+                }
+                write_addr += FLASH_PAGE_SIZE;   /* một lần duy nhất, dù verify OK hay không */
+            }
+            page_cnt = 0;
+        }
     }
   }
   /* USER CODE END storage_task */

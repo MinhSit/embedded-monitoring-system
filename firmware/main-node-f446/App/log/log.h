@@ -8,4 +8,7 @@ typedef enum{
 } log_level_t;
 
 void log_write(log_level_t level, const char *msg);
+
+void log_init(void);
+
 #endif /* LOG_H */

@@ -1,7 +1,7 @@
 #include "drivers/mpu6050/mpu6050.h"
 
 #define MPU6050_I2C_ADDR          0x68U
-#define MPU6050_I2C_TIMEOUT_MS    100U
+#define MPU6050_I2C_TIMEOUT_MS    10U
 
 #define MPU6050_REG_ACCEL_XOUT_H  0x3BU
 #define MPU6050_REG_PWR_MGMT_1    0x6BU

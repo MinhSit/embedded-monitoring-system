@@ -91,6 +91,9 @@ const osThreadAttr_t storage_attributes = {
 /* USER CODE BEGIN PV */
 osMessageQueueId_t sample_queue;
 static volatile uint32_t sample_drop_cnt = 0;
+static volatile uint32_t pages_ok = 0;
+static volatile uint32_t acq_err_cnt = 0;
+static volatile uint32_t flash_err_cnt = 0;
 static const w25q64_t flash = {
     .hspi    = &hspi1,
     .cs_port = FLASH_CS_GPIO_Port,
@@ -630,11 +633,15 @@ void heartbeat_task(void *argument)
   /* USER CODE BEGIN 5 */
   uint32_t beat = 0;
   uint32_t next_wake = osKernelGetTickCount();
-  char msg[50];
+  char msg[100];
   /* Infinite loop */
   for(;;)
   {
-    snprintf(msg, sizeof(msg), "heartbeat %lu drops=%lu", beat, sample_drop_cnt);
+    uint32_t free_b = osThreadGetStackSpace(heartbeatHandle);
+    uint32_t free_c = osThreadGetStackSpace(acquisitionHandle);
+    uint32_t free_d = osThreadGetStackSpace(storageHandle);
+    snprintf(msg, sizeof(msg), "heartbeat %lu drops=%lu hw=%lu acq=%lu st=%lu pg=%lu ae=%lu fe=%lu",
+            beat, sample_drop_cnt, free_b, free_c, free_d, pages_ok, acq_err_cnt, flash_err_cnt);
     log_write(LOG_LEVEL_INFO, msg);
     next_wake += HEARTBEAT_PERIOD_MS;
     osDelayUntil(next_wake);
@@ -663,6 +670,7 @@ void acquisition_task(void *argument)
       s.tick = osKernelGetTickCount();
       mpu6050_status_t mpu_st = mpu6050_read_raw(&hi2c1, &s.raw);
       if(mpu_st != MPU6050_OK){
+          acq_err_cnt++;
           char msg[32];
           snprintf(msg, sizeof(msg), "MPU6050 read failed %d", (int)mpu_st);
           log_write(LOG_LEVEL_ERROR, msg);
@@ -713,6 +721,7 @@ void storage_task(void *argument)
                 flash_st = w25q64_page_program(&flash, write_addr, (const uint8_t *)page_buf, sizeof(page_buf));
             }
             if(flash_st != W25Q64_OK){
+                flash_err_cnt++;
                 char msg[50];
                 snprintf(msg, sizeof(msg), "W25Q64 write failed: %d addr=%06lX", (int)flash_st, write_addr);
                 log_write(LOG_LEVEL_ERROR, msg);
@@ -720,12 +729,14 @@ void storage_task(void *argument)
             else{   /* ghi OK */
                 flash_st = w25q64_read_data(&flash, write_addr, verify_buf, sizeof(verify_buf));
                 if(flash_st != W25Q64_OK){
+                    flash_err_cnt++;
                     char msg[50];
                     snprintf(msg, sizeof(msg), "W25Q64 read back failed: %d", (int)flash_st);
                     log_write(LOG_LEVEL_ERROR, msg);
                 }
                 else if(memcmp(verify_buf, page_buf, sizeof(page_buf)) != 0){
                     /* log ERROR: page verify FAIL addr=... */
+                    flash_err_cnt++;
                     char msg[50];
                     snprintf(msg, sizeof(msg), "page verify FAIL addr=%06lX", write_addr);
                     log_write(LOG_LEVEL_ERROR, msg);
@@ -733,6 +744,7 @@ void storage_task(void *argument)
                 else{
                     /* log INFO: page full seq=a..b addr=... verify=OK */
                     char msg[50];
+                    pages_ok++;
                     snprintf(msg, sizeof(msg), "page full seq=%lu..%lu addr=%06lX",
                              page_buf[0].seq,
                              page_buf[SAMPLES_PER_PAGE - 1].seq,

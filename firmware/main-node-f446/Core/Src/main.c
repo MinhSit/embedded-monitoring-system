@@ -90,6 +90,13 @@ const osThreadAttr_t storage_attributes = {
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
 /* USER CODE BEGIN PV */
+osThreadId_t rxHandle;
+const osThreadAttr_t rx_attributes = {
+  .name = "rx",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
+
 osMessageQueueId_t sample_queue;
 static volatile uint32_t sample_drop_cnt = 0;
 static volatile uint32_t pages_ok = 0;
@@ -102,6 +109,7 @@ static const w25q64_t flash = {
 };
 static ringbuf_t rx_rb;
 static uint8_t rx_byte;
+volatile uint32_t rx_lost_cnt = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -115,7 +123,7 @@ void acquisition_task(void *argument);
 void storage_task(void *argument);
 
 /* USER CODE BEGIN PFP */
-
+void rx_task(void *argument);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -409,6 +417,7 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+  rxHandle = osThreadNew(rx_task, NULL, &rx_attributes);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -625,8 +634,22 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
     if(huart->Instance == USART2){
-        ringbuf_put(&rx_rb, rx_byte);
+        if(!ringbuf_put(&rx_rb, rx_byte)){
+            rx_lost_cnt++;
+        }
         HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+    }
+}
+
+void rx_task(void *argument){
+    uint8_t b;
+    for(;;){
+        while(ringbuf_get(&rx_rb, &b)){
+            char msg[30];
+            snprintf(msg, sizeof(msg), "rx: %02X", b);
+            log_write(LOG_LEVEL_INFO, msg);
+        }
+        osDelay(10);
     }
 }
 /* USER CODE END 4 */
@@ -650,8 +673,8 @@ void heartbeat_task(void *argument)
     uint32_t free_b = osThreadGetStackSpace(heartbeatHandle);
     uint32_t free_c = osThreadGetStackSpace(acquisitionHandle);
     uint32_t free_d = osThreadGetStackSpace(storageHandle);
-    snprintf(msg, sizeof(msg), "heartbeat %lu drops=%lu hw=%lu acq=%lu st=%lu pg=%lu ae=%lu fe=%lu",
-            beat, sample_drop_cnt, free_b, free_c, free_d, pages_ok, acq_err_cnt, flash_err_cnt);
+    snprintf(msg, sizeof(msg), "heartbeat %lu drops=%lu hw=%lu acq=%lu st=%lu pg=%lu ae=%lu fe=%lu lost=%lu",
+            beat, sample_drop_cnt, free_b, free_c, free_d, pages_ok, acq_err_cnt, flash_err_cnt, (unsigned long)rx_lost_cnt);
     log_write(LOG_LEVEL_INFO, msg);
     next_wake += HEARTBEAT_PERIOD_MS;
     osDelayUntil(next_wake);

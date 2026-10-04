@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "log/log.h"
+#include "ringbuf/ringbuf.h"
 #include "drivers/mpu6050/mpu6050.h"
 #include "drivers/w25q64/w25q64.h"
 /* USER CODE END Includes */
@@ -99,6 +100,8 @@ static const w25q64_t flash = {
     .cs_port = FLASH_CS_GPIO_Port,
     .cs_pin  = FLASH_CS_Pin
 };
+static ringbuf_t rx_rb;
+static uint8_t rx_byte;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -200,6 +203,7 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+  ringbuf_init(&rx_rb);
   printf("=================================\r\n");
   printf("Embedded Monitoring System\r\n");
   printf("Board    : %s\r\n", BOARD_NAME);
@@ -208,6 +212,7 @@ int main(void)
   log_write(LOG_LEVEL_INFO, "Boot OK");
 
   mpu6050_status_t mpu_st = mpu6050_init(&hi2c1);
+  HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
   if(mpu_st != MPU6050_OK){
       char msg[32];
       snprintf(msg, sizeof(msg), "MPU6050 init failed: %d", (int)mpu_st);
@@ -618,7 +623,12 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+    if(huart->Instance == USART2){
+        ringbuf_put(&rx_rb, rx_byte);
+        HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+    }
+}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_heartbeat_task */

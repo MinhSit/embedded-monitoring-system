@@ -28,6 +28,8 @@
 #include "ringbuf/ringbuf.h"
 #include "drivers/mpu6050/mpu6050.h"
 #include "drivers/w25q64/w25q64.h"
+#include "record/record.h"
+#include "crc/crc32.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,7 +53,7 @@ typedef struct {
 #define ACQ_LOG_EVERY 10U
 #define SAMPLE_QUEUE_DEPTH 16U
 #define FLASH_PAGE_SIZE   256U
-#define SAMPLES_PER_PAGE  (FLASH_PAGE_SIZE / sizeof(sample_t))   /* = 10 */
+#define RECORDS_PER_PAGE  (FLASH_PAGE_SIZE / RECORD_SIZE)   /* = 8 */
 #define LOG_START_ADDR  0x001000UL
 #define SECTOR_SIZE     4096UL
 /* USER CODE END PD */
@@ -124,6 +126,21 @@ void storage_task(void *argument);
 
 /* USER CODE BEGIN PFP */
 void rx_task(void *argument);
+/* Đổi sample_t -> record_t (32 B, CRC-32 trên 28 byte đầu) */
+static void record_from_sample(const sample_t *s, record_t *r)
+{
+    memset(r, 0, sizeof(record_t));
+    r->seq = s->seq;
+    r->ts_ms = s->tick;
+    r->accel[0] = s->raw.accel_x;
+    r->accel[1] = s->raw.accel_y;
+    r->accel[2] = s->raw.accel_z;
+    r->gyro[0] = s->raw.gyro_x;
+    r->gyro[1] = s->raw.gyro_y;
+    r->gyro[2] = s->raw.gyro_z;
+    r->temp = s->raw.temp;
+    r->crc = crc32_calc((const uint8_t *)r, offsetof(record_t, crc));
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -733,7 +750,7 @@ void storage_task(void *argument)
   /* USER CODE BEGIN storage_task */
   sample_t s;
   osStatus_t st;
-  static sample_t page_buf[SAMPLES_PER_PAGE]; /* static: không chiếm stack 1 KB của task */
+  static record_t page_buf[RECORDS_PER_PAGE]; /* static: không chiếm stack 1 KB của task */
   static uint8_t verify_buf[sizeof(page_buf)];
   uint32_t page_cnt = 0;                      /* số sample đang có trong page_buf */
   uint32_t write_addr = LOG_START_ADDR;   /* địa chỉ page tiếp theo sẽ ghi */
@@ -743,9 +760,9 @@ void storage_task(void *argument)
   {
     st = osMessageQueueGet(sample_queue, &s, NULL, osWaitForever);
     if(st == osOK){
-        page_buf[page_cnt] = s;
+        record_from_sample(&s, &page_buf[page_cnt]);
         page_cnt++;
-        if(page_cnt == SAMPLES_PER_PAGE){
+        if(page_cnt == RECORDS_PER_PAGE){
             flash_st = W25Q64_OK;
             if(write_addr % SECTOR_SIZE == 0){
                 flash_st = w25q64_sector_erase(&flash, write_addr);
@@ -780,7 +797,7 @@ void storage_task(void *argument)
                     pages_ok++;
                     snprintf(msg, sizeof(msg), "page full seq=%lu..%lu addr=%06lX",
                              page_buf[0].seq,
-                             page_buf[SAMPLES_PER_PAGE - 1].seq,
+                             page_buf[RECORDS_PER_PAGE - 1].seq,
                              write_addr);
                     log_write(LOG_LEVEL_INFO, msg);
                 }

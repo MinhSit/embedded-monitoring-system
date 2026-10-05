@@ -56,6 +56,7 @@ typedef struct {
 #define RECORDS_PER_PAGE  (FLASH_PAGE_SIZE / RECORD_SIZE)   /* = 8 */
 #define LOG_START_ADDR  0x001000UL
 #define SECTOR_SIZE     4096UL
+#define W25Q64_CAPACITY          0x800000UL   /* 8 MB = 64 Mbit */
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -159,6 +160,40 @@ static uint32_t storage_scan_page(const w25q64_t *dev, uint32_t addr){
         }
     }
     return bad;
+}
+
+/* Trả 1 nếu cả 256 byte tại addr đều 0xFF (page chưa ghi), 0 nếu có byte khác, -1 nếu lỗi đọc flash */
+static int storage_page_is_blank(const w25q64_t *dev, uint32_t addr){
+    uint8_t buf[FLASH_PAGE_SIZE];
+    w25q64_status_t st = w25q64_read_data(dev, addr, buf, sizeof(buf));
+    if(st != W25Q64_OK){
+        char msg[32];
+        snprintf(msg, sizeof(msg), "page read failed: %d", (int)st);
+        log_write(LOG_LEVEL_ERROR, msg);
+        return -1;
+    }
+    for(uint32_t i = 0; i < FLASH_PAGE_SIZE; i++){
+        if(buf[i] != 0xFF){
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* Quét từng page từ LOG_START_ADDR, trả địa chỉ page trống đầu tiên.
+ * Hết flash không có page trống thì trả W25Q64_CAPACITY (log đầy).
+ * Lỗi đọc flash thì trả LOG_START_ADDR. */
+static uint32_t storage_find_write_addr(const w25q64_t *dev){
+    for(uint32_t i = LOG_START_ADDR; i < W25Q64_CAPACITY; i+=FLASH_PAGE_SIZE){
+        int r = storage_page_is_blank(dev, i);
+        if(r == 1){
+            return i;
+        }
+        else if(r == -1){
+            return LOG_START_ADDR;
+        }
+    }
+    return W25Q64_CAPACITY;
 }
 /* USER CODE END PFP */
 
@@ -772,11 +807,13 @@ void storage_task(void *argument)
   static record_t page_buf[RECORDS_PER_PAGE]; /* static: không chiếm stack 1 KB của task */
   static uint8_t verify_buf[sizeof(page_buf)];
   uint32_t page_cnt = 0;                      /* số sample đang có trong page_buf */
-  uint32_t write_addr = LOG_START_ADDR;   /* địa chỉ page tiếp theo sẽ ghi */
+  uint32_t write_addr = storage_find_write_addr(&flash);    /* địa chỉ page tiếp theo sẽ ghi */
   w25q64_status_t flash_st;
   uint32_t bad0 = storage_scan_page(&flash, LOG_START_ADDR);   /* page cũ của lần chạy trước, chưa bị erase */
   char boot_msg[50];
   snprintf(boot_msg, sizeof(boot_msg), "scan addr=%06lX bad=%lu", LOG_START_ADDR, bad0);
+  log_write(LOG_LEVEL_INFO, boot_msg);
+  snprintf(boot_msg, sizeof(boot_msg), "resume addr=%06lX", write_addr);
   log_write(LOG_LEVEL_INFO, boot_msg);
   /* Infinite loop */
   for(;;)

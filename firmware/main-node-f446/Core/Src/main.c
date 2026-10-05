@@ -807,6 +807,7 @@ void storage_task(void *argument)
   static record_t page_buf[RECORDS_PER_PAGE]; /* static: không chiếm stack 1 KB của task */
   static uint8_t verify_buf[sizeof(page_buf)];
   uint32_t page_cnt = 0;                      /* số sample đang có trong page_buf */
+  static uint8_t full_logged = 0;
   uint32_t write_addr = storage_find_write_addr(&flash);    /* địa chỉ page tiếp theo sẽ ghi */
   w25q64_status_t flash_st;
   uint32_t bad0 = storage_scan_page(&flash, LOG_START_ADDR);   /* page cũ của lần chạy trước, chưa bị erase */
@@ -823,45 +824,53 @@ void storage_task(void *argument)
         record_from_sample(&s, &page_buf[page_cnt]);
         page_cnt++;
         if(page_cnt == RECORDS_PER_PAGE){
-            flash_st = W25Q64_OK;
-            if(write_addr % SECTOR_SIZE == 0){
-                flash_st = w25q64_sector_erase(&flash, write_addr);
+            if(write_addr >= W25Q64_CAPACITY){
+               if(full_logged == 0){
+                   log_write(LOG_LEVEL_WARN, "flash full, stop logging");
+                   full_logged = 1;
+               }
             }
-            if(flash_st == W25Q64_OK){                 /* erase lỗi thì bỏ qua program */
-                flash_st = w25q64_page_program(&flash, write_addr, (const uint8_t *)page_buf, sizeof(page_buf));
-            }
-            if(flash_st != W25Q64_OK){
-                flash_err_cnt++;
-                char msg[50];
-                snprintf(msg, sizeof(msg), "W25Q64 write failed: %d addr=%06lX", (int)flash_st, write_addr);
-                log_write(LOG_LEVEL_ERROR, msg);
-            }
-            else{   /* ghi OK */
-                flash_st = w25q64_read_data(&flash, write_addr, verify_buf, sizeof(verify_buf));
+            else{
+                flash_st = W25Q64_OK;
+                if(write_addr % SECTOR_SIZE == 0){
+                    flash_st = w25q64_sector_erase(&flash, write_addr);
+                }
+                if(flash_st == W25Q64_OK){                 /* erase lỗi thì bỏ qua program */
+                    flash_st = w25q64_page_program(&flash, write_addr, (const uint8_t *)page_buf, sizeof(page_buf));
+                }
                 if(flash_st != W25Q64_OK){
                     flash_err_cnt++;
                     char msg[50];
-                    snprintf(msg, sizeof(msg), "W25Q64 read back failed: %d", (int)flash_st);
+                    snprintf(msg, sizeof(msg), "W25Q64 write failed: %d addr=%06lX", (int)flash_st, write_addr);
                     log_write(LOG_LEVEL_ERROR, msg);
                 }
-                else if(memcmp(verify_buf, page_buf, sizeof(page_buf)) != 0){
-                    /* log ERROR: page verify FAIL addr=... */
-                    flash_err_cnt++;
-                    char msg[50];
-                    snprintf(msg, sizeof(msg), "page verify FAIL addr=%06lX", write_addr);
-                    log_write(LOG_LEVEL_ERROR, msg);
+                else{   /* ghi OK */
+                    flash_st = w25q64_read_data(&flash, write_addr, verify_buf, sizeof(verify_buf));
+                    if(flash_st != W25Q64_OK){
+                        flash_err_cnt++;
+                        char msg[50];
+                        snprintf(msg, sizeof(msg), "W25Q64 read back failed: %d", (int)flash_st);
+                        log_write(LOG_LEVEL_ERROR, msg);
+                    }
+                    else if(memcmp(verify_buf, page_buf, sizeof(page_buf)) != 0){
+                        /* log ERROR: page verify FAIL addr=... */
+                        flash_err_cnt++;
+                        char msg[50];
+                        snprintf(msg, sizeof(msg), "page verify FAIL addr=%06lX", write_addr);
+                        log_write(LOG_LEVEL_ERROR, msg);
+                    }
+                    else{
+                        /* log INFO: page full seq=a..b addr=... verify=OK */
+                        char msg[50];
+                        pages_ok++;
+                        snprintf(msg, sizeof(msg), "page full seq=%lu..%lu addr=%06lX",
+                                 page_buf[0].seq,
+                                 page_buf[RECORDS_PER_PAGE - 1].seq,
+                                 write_addr);
+                        log_write(LOG_LEVEL_INFO, msg);
+                    }
+                    write_addr += FLASH_PAGE_SIZE;   /* một lần duy nhất, dù verify OK hay không */
                 }
-                else{
-                    /* log INFO: page full seq=a..b addr=... verify=OK */
-                    char msg[50];
-                    pages_ok++;
-                    snprintf(msg, sizeof(msg), "page full seq=%lu..%lu addr=%06lX",
-                             page_buf[0].seq,
-                             page_buf[RECORDS_PER_PAGE - 1].seq,
-                             write_addr);
-                    log_write(LOG_LEVEL_INFO, msg);
-                }
-                write_addr += FLASH_PAGE_SIZE;   /* một lần duy nhất, dù verify OK hay không */
             }
             page_cnt = 0;
         }

@@ -141,6 +141,25 @@ static void record_from_sample(const sample_t *s, record_t *r)
     r->temp = s->raw.temp;
     r->crc = crc32_calc((const uint8_t *)r, offsetof(record_t, crc));
 }
+
+/* Đọc 1 page tại addr, trả số record có CRC sai (0..8); lỗi đọc flash trả RECORDS_PER_PAGE + 1 */
+static uint32_t storage_scan_page(const w25q64_t *dev, uint32_t addr){
+    record_t rd[RECORDS_PER_PAGE];   /* mảng record_t thật: đúng alignment, khỏi ép kiểu từ uint8_t* */
+    uint32_t bad = 0;
+    w25q64_status_t st = w25q64_read_data(dev, addr, (uint8_t *)rd, sizeof(rd));
+    if(st != W25Q64_OK){
+        char msg[50];
+        snprintf(msg, sizeof(msg), "page read failed: %d", (int)st);
+        log_write(LOG_LEVEL_ERROR, msg);
+        return RECORDS_PER_PAGE + 1;
+    }
+    for(size_t i = 0; i < RECORDS_PER_PAGE; i ++){
+        if(!record_check(&rd[i])){
+            bad++;
+        }
+    }
+    return bad;
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -755,6 +774,10 @@ void storage_task(void *argument)
   uint32_t page_cnt = 0;                      /* số sample đang có trong page_buf */
   uint32_t write_addr = LOG_START_ADDR;   /* địa chỉ page tiếp theo sẽ ghi */
   w25q64_status_t flash_st;
+  uint32_t bad0 = storage_scan_page(&flash, LOG_START_ADDR);   /* page cũ của lần chạy trước, chưa bị erase */
+  char boot_msg[50];
+  snprintf(boot_msg, sizeof(boot_msg), "scan addr=%06lX bad=%lu", LOG_START_ADDR, bad0);
+  log_write(LOG_LEVEL_INFO, boot_msg);
   /* Infinite loop */
   for(;;)
   {

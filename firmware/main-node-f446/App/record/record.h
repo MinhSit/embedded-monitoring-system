@@ -17,4 +17,7 @@ typedef struct {
 
 _Static_assert(sizeof(record_t) == RECORD_SIZE, "record_t must be 32 bytes");
 
+/* Trả về 1 nếu CRC-32 của 28 byte đầu khớp r->crc, ngược lại 0 */
+int record_check(const record_t *r);
+
 #endif

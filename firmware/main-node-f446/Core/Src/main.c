@@ -31,6 +31,7 @@
 #include "record/record.h"
 #include "crc/crc32.h"
 #include "cli/cli.h"
+#include "health/health.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -115,6 +116,7 @@ static ringbuf_t rx_rb;
 static cli_line_t rx_line;
 static uint8_t rx_byte;
 volatile uint32_t rx_lost_cnt = 0;
+static osEventFlagsId_t health_flags;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -544,6 +546,8 @@ int main(void)
             (unsigned)sizeof(sample_t));
     log_write(LOG_LEVEL_INFO, msg);
   }
+
+  health_flags = osEventFlagsNew(NULL);
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -794,6 +798,7 @@ void rx_task(void *argument){
                 }
             }
         }
+        osEventFlagsSet(health_flags, HEALTH_TASK_RX);
         osDelay(10);
     }
 }
@@ -886,6 +891,7 @@ void acquisition_task(void *argument)
           }
           sample_cnt++;
       }
+      osEventFlagsSet(health_flags, HEALTH_TASK_ACQ);
       next_wake += ACQ_PERIOD_MS;
       osDelayUntil(next_wake);
   }
@@ -919,7 +925,8 @@ void storage_task(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    st = osMessageQueueGet(sample_queue, &s, NULL, osWaitForever);
+    osEventFlagsSet(health_flags, HEALTH_TASK_STORAGE);
+    st = osMessageQueueGet(sample_queue, &s, NULL, 1000U);
     if(st == osOK){
         record_from_sample(&s, &page_buf[page_cnt]);
         page_cnt++;

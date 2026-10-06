@@ -30,6 +30,7 @@
 #include "drivers/w25q64/w25q64.h"
 #include "record/record.h"
 #include "crc/crc32.h"
+#include "cli/cli.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -96,7 +97,7 @@ const osThreadAttr_t storage_attributes = {
 osThreadId_t rxHandle;
 const osThreadAttr_t rx_attributes = {
   .name = "rx",
-  .stack_size = 256 * 4,
+  .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
 
@@ -111,6 +112,7 @@ static const w25q64_t flash = {
     .cs_pin  = FLASH_CS_Pin
 };
 static ringbuf_t rx_rb;
+static cli_line_t rx_line;
 static uint8_t rx_byte;
 volatile uint32_t rx_lost_cnt = 0;
 /* USER CODE END PV */
@@ -243,6 +245,21 @@ static void cmd_status(size_t argc, char *argv[])
             (unsigned long)rx_lost_cnt);
     log_write(LOG_LEVEL_INFO, msg);
 }
+
+static void cmd_help(size_t argc, char *argv[]);
+
+static const cli_cmd_t cli_table[] = {
+    {"help",   cmd_help,   "list commands"},
+    {"status", cmd_status, "show counters"},
+    {"dump",   cmd_dump,   "dump first log page"},
+};
+#define CLI_TABLE_SIZE (sizeof(cli_table) / sizeof(cli_table[0]))
+
+static void cmd_help(size_t argc, char *argv[]){
+    (void)argc;
+    (void)argv;
+    cli_print_help(cli_table, CLI_TABLE_SIZE);
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -331,6 +348,7 @@ int main(void)
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   ringbuf_init(&rx_rb);
+  cli_line_init(&rx_line);
   printf("=================================\r\n");
   printf("Embedded Monitoring System\r\n");
   printf("Board    : %s\r\n", BOARD_NAME);
@@ -764,9 +782,13 @@ void rx_task(void *argument){
     uint8_t b;
     for(;;){
         while(ringbuf_get(&rx_rb, &b)){
-            char msg[30];
-            snprintf(msg, sizeof(msg), "rx: %02X", b);
-            log_write(LOG_LEVEL_INFO, msg);
+            if(cli_line_feed(&rx_line, (char)b)){
+                char *argv[CLI_MAX_ARGS];
+                size_t argc = cli_tokenize(rx_line.buf, argv, CLI_MAX_ARGS);
+                if(!cli_dispatch(cli_table, CLI_TABLE_SIZE, argc, argv)){
+                    log_write(LOG_LEVEL_WARN, "unknown cmd");
+                }
+            }
         }
         osDelay(10);
     }
@@ -785,15 +807,25 @@ void heartbeat_task(void *argument)
   /* USER CODE BEGIN 5 */
   uint32_t beat = 0;
   uint32_t next_wake = osKernelGetTickCount();
-  char msg[100];
+  char msg[120];
   /* Infinite loop */
   for(;;)
   {
     uint32_t free_b = osThreadGetStackSpace(heartbeatHandle);
     uint32_t free_c = osThreadGetStackSpace(acquisitionHandle);
     uint32_t free_d = osThreadGetStackSpace(storageHandle);
-    snprintf(msg, sizeof(msg), "heartbeat %lu drops=%lu hw=%lu acq=%lu st=%lu pg=%lu ae=%lu fe=%lu lost=%lu",
-            beat, sample_drop_cnt, free_b, free_c, free_d, pages_ok, acq_err_cnt, flash_err_cnt, (unsigned long)rx_lost_cnt);
+    uint32_t free_e = osThreadGetStackSpace(rxHandle);
+    snprintf(msg, sizeof(msg), "heartbeat %lu drops=%lu hw=%lu acq=%lu st=%lu pg=%lu ae=%lu fe=%lu lost=%lu rx=%lu",
+            beat,
+            sample_drop_cnt,
+            free_b,
+            free_c,
+            free_d,
+            pages_ok,
+            acq_err_cnt,
+            flash_err_cnt,
+            (unsigned long)rx_lost_cnt,
+            free_e);
     log_write(LOG_LEVEL_INFO, msg);
     next_wake += HEARTBEAT_PERIOD_MS;
     osDelayUntil(next_wake);

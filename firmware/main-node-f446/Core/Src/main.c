@@ -129,6 +129,8 @@ void storage_task(void *argument);
 
 /* USER CODE BEGIN PFP */
 void rx_task(void *argument);
+static void print_reset_reason(void);
+
 /* Đổi sample_t -> record_t (32 B, CRC-32 trên 28 byte đầu) */
 static void record_from_sample(const sample_t *s, record_t *r)
 {
@@ -355,6 +357,8 @@ int main(void)
   printf("Firmware : %s\r\n", FIRMWARE_VERSION);
   printf("=================================\r\n");
   log_write(LOG_LEVEL_INFO, "Boot OK");
+
+  print_reset_reason();
 
   mpu6050_status_t mpu_st = mpu6050_init(&hi2c1);
   HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
@@ -792,6 +796,22 @@ void rx_task(void *argument){
         }
         osDelay(10);
     }
+}
+
+static void print_reset_reason(void){
+    if(__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST)){
+        log_write(LOG_LEVEL_INFO, "reset: IWDGRST");
+    }
+    if(__HAL_RCC_GET_FLAG(RCC_FLAG_PORRST)){
+        log_write(LOG_LEVEL_INFO, "reset: PORRST");
+    }
+    if(__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST)){
+        log_write(LOG_LEVEL_INFO, "reset: PINRST");
+    }
+    if(__HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST)){
+        log_write(LOG_LEVEL_INFO, "reset: SFTRST");
+    }
+    __HAL_RCC_CLEAR_RESET_FLAGS();
 }
 /* USER CODE END 4 */
 

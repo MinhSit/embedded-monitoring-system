@@ -117,6 +117,7 @@ static cli_line_t rx_line;
 static uint8_t rx_byte;
 volatile uint32_t rx_lost_cnt = 0;
 static osEventFlagsId_t health_flags;
+static volatile bool boot_scan_done = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -132,6 +133,19 @@ void storage_task(void *argument);
 /* USER CODE BEGIN PFP */
 void rx_task(void *argument);
 static void print_reset_reason(void);
+
+static void iwdg_start(void){
+    IWDG->KR = 0x5555;
+    IWDG->PR = 4;
+    IWDG->RLR = 1999;
+    IWDG->KR = 0xCCCC;
+    while(true){
+        if(IWDG->SR == 0){
+            break;
+        }
+    }
+    IWDG->KR = 0xAAAA;
+}
 
 /* Đổi sample_t -> record_t (32 B, CRC-32 trên 28 byte đầu) */
 static void record_from_sample(const sample_t *s, record_t *r)
@@ -833,6 +847,7 @@ void heartbeat_task(void *argument)
   uint32_t beat = 0;
   uint32_t next_wake = osKernelGetTickCount();
   char msg[120];
+  bool wdg_started = false;
   /* Infinite loop */
   for(;;)
   {
@@ -855,6 +870,22 @@ void heartbeat_task(void *argument)
     next_wake += HEARTBEAT_PERIOD_MS;
     osDelayUntil(next_wake);
     beat++;
+    if(boot_scan_done && !wdg_started){
+        osEventFlagsClear(health_flags, HEALTH_TASK_ALL);
+        iwdg_start();
+        wdg_started = true;
+        log_write(LOG_LEVEL_INFO, "iwdg started");
+    }
+    else if(wdg_started){
+        uint32_t alive = osEventFlagsClear(health_flags, HEALTH_TASK_ALL);
+        if(health_ok(alive, HEALTH_TASK_ALL)){
+            IWDG->KR = 0xAAAA;
+        }
+        else{
+            snprintf(msg, sizeof(msg), "health fail alive=%02lX", alive);
+            log_write(LOG_LEVEL_ERROR, msg);
+        }
+    }
   }
   /* USER CODE END 5 */
 }
@@ -915,6 +946,7 @@ void storage_task(void *argument)
   uint32_t page_cnt = 0;                      /* số sample đang có trong page_buf */
   static uint8_t full_logged = 0;
   uint32_t write_addr = storage_find_write_addr(&flash);    /* địa chỉ page tiếp theo sẽ ghi */
+  boot_scan_done = true;
   w25q64_status_t flash_st;
   uint32_t bad0 = storage_scan_page(&flash, LOG_START_ADDR);   /* page cũ của lần chạy trước, chưa bị erase */
   char boot_msg[50];

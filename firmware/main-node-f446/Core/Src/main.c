@@ -196,6 +196,39 @@ static uint32_t storage_find_write_addr(const w25q64_t *dev){
     return W25Q64_CAPACITY;
 }
 
+/* In 1 record qua log_write: "rec seq=.. ts=.. az=.. crc=OK|BAD" */
+static void dump_print_record(const record_t *r){
+    char msg[64];
+    snprintf(msg, sizeof(msg), "rec seq=%lu ts=%lu az=%d crc=%s",
+            (unsigned long)r->seq,
+            (unsigned long)r->ts_ms,
+            (int)r->accel[2],
+            record_check(r) ? "OK" : "BAD");
+    log_write(LOG_LEVEL_INFO, msg);
+}
+
+/* Đọc 1 page tại addr, in từng record qua dump_print_record. Lỗi đọc flash thì log ERROR. */
+static void dump_page(const w25q64_t *dev, uint32_t addr){
+    record_t rd[RECORDS_PER_PAGE];
+    w25q64_status_t st = w25q64_read_data(dev, addr, (uint8_t *)rd, sizeof(rd));
+    if(st != W25Q64_OK){
+        char msg[50];
+        snprintf(msg, sizeof(msg), "page read failed: %d", (int)st);
+        log_write(LOG_LEVEL_ERROR, msg);
+        return;
+    }
+    for(size_t i = 0; i < RECORDS_PER_PAGE; i++){
+        dump_print_record(&rd[i]);
+    }
+}
+
+/* dump: đọc page đầu của log (LOG_START_ADDR) và in 8 record */
+static void cmd_dump(size_t argc, char *argv[]){
+    (void)argc;
+    (void)argv;
+    dump_page(&flash, LOG_START_ADDR);
+}
+
 static void cmd_status(size_t argc, char *argv[])
 {
     (void)argc;

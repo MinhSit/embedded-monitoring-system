@@ -1,4 +1,6 @@
 #include "cli.h"
+#include <string.h>
+#include <stdio.h>
 
 size_t cli_tokenize(char *line, char *argv[], size_t max_args)
 {
@@ -24,22 +26,21 @@ void cli_line_init(cli_line_t *l){
     l->len = 0;
 }
 
-bool cli_line_feed(cli_line_t *l, char c){
-    if(c == '\r' || c == '\n'){
-        if(l->len == 0){
-            return false;
-        }
-        else{
-            l->buf[l->len] = '\0';
-            l->len = 0;
+bool cli_dispatch(const cli_cmd_t *table, size_t n, size_t argc, char *argv[]){
+    if(argc == 0){
+        return false;
+    }
+    for(size_t i = 0; i < n; i++){
+        if(strcmp(table[i].name, argv[0]) == 0){
+            table[i].handler(argc, argv);
             return true;
         }
     }
-    else{
-        if(l->len < CLI_LINE_MAX - 1){
-            l->buf[l->len++] = c;
-            return false;
-        }
-    }
     return false;
+}
+
+void cli_print_help(const cli_cmd_t *table, size_t n){
+    for(size_t i = 0; i < n; i++){
+        printf("%s - %s\r\n", table[i].name, table[i].help);
+    }
 }

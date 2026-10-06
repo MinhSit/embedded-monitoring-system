@@ -23,4 +23,20 @@ void cli_line_init(cli_line_t *l);
  * Dong rong (vd chuoi "\r\n" thi ky tu '\n' sau '\r') tra ve false. */
 bool cli_line_feed(cli_line_t *l, char c);
 
+/* Ham xu ly 1 lenh: argv[0] la ten lenh, argc la so token. */
+typedef void (*cli_handler_t)(size_t argc, char *argv[]);
+
+typedef struct{
+    const char *name;      /* ten lenh go vao, vd "help" */
+    cli_handler_t handler; /* ham chay khi gap lenh */
+    const char *help;      /* mo ta 1 dong, in ra boi lenh help */
+}cli_cmd_t;
+
+/* Tra argv[0] trong table (n phan tu). Gap lenh thi goi handler, tra true.
+ * argc == 0 hoac khong tim thay thi tra false. */
+bool cli_dispatch(const cli_cmd_t *table, size_t n, size_t argc, char *argv[]);
+
+/* In moi lenh trong table, moi lenh 1 dong: "name - help\r\n" (dung printf). */
+void cli_print_help(const cli_cmd_t *table, size_t n);
+
 #endif

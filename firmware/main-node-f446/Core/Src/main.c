@@ -195,6 +195,21 @@ static uint32_t storage_find_write_addr(const w25q64_t *dev){
     }
     return W25Q64_CAPACITY;
 }
+
+static void cmd_status(size_t argc, char *argv[])
+{
+    (void)argc;
+    (void)argv;
+    char msg[96];
+    snprintf(msg, sizeof(msg), "status up=%lu drops=%lu pg=%lu ae=%lu fe=%lu lost=%lu",
+            (unsigned long)osKernelGetTickCount(),
+            (unsigned long)sample_drop_cnt,
+            (unsigned long)pages_ok,
+            (unsigned long)acq_err_cnt,
+            (unsigned long)flash_err_cnt,
+            (unsigned long)rx_lost_cnt);
+    log_write(LOG_LEVEL_INFO, msg);
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/

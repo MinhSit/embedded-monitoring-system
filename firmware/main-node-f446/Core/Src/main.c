@@ -33,6 +33,7 @@
 #include "cli/cli.h"
 #include "health/health.h"
 #include "findblank/find_blank.h"
+#include "drivers/ssd1306/ssd1306.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -371,6 +372,13 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+  HAL_StatusTypeDef oled_st = ssd1306_init(&hi2c1);
+  printf("OLED init st=%d\r\n", oled_st);
+  ssd1306_clear(&hi2c1);
+
+  ssd1306_write_str2x(&hi2c1, "SYS:RUN", 0, 0);
+  ssd1306_write_str2x(&hi2c1, "DROP:0", 0, 2);
+
   ringbuf_init(&rx_rb);
   cli_line_init(&rx_line);
   printf("=================================\r\n");

@@ -32,6 +32,7 @@
 #include "crc/crc32.h"
 #include "cli/cli.h"
 #include "health/health.h"
+#include "findblank/find_blank.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -200,20 +201,25 @@ static int storage_page_is_blank(const w25q64_t *dev, uint32_t addr){
     return 1;
 }
 
+/* Adapter: đổi page_index (0 = LOG_START_ADDR) thành địa chỉ rồi hỏi storage_page_is_blank.
+ * ctx = const w25q64_t * */
+static int storage_blank_cb(void *ctx, uint32_t page_index){
+    return storage_page_is_blank(ctx, LOG_START_ADDR + page_index * FLASH_PAGE_SIZE);
+}
+
 /* Quét từng page từ LOG_START_ADDR, trả địa chỉ page trống đầu tiên.
  * Hết flash không có page trống thì trả W25Q64_CAPACITY (log đầy).
  * Lỗi đọc flash thì trả LOG_START_ADDR. */
 static uint32_t storage_find_write_addr(const w25q64_t *dev){
-    for(uint32_t i = LOG_START_ADDR; i < W25Q64_CAPACITY; i+=FLASH_PAGE_SIZE){
-        int r = storage_page_is_blank(dev, i);
-        if(r == 1){
-            return i;
-        }
-        else if(r == -1){
-            return LOG_START_ADDR;
-        }
+    uint32_t n_pages = (W25Q64_CAPACITY - LOG_START_ADDR) / FLASH_PAGE_SIZE;
+    uint32_t idx;
+    int rc = find_first_blank(storage_blank_cb, (void *)dev, n_pages, &idx);
+    if(rc < 0){
+        return LOG_START_ADDR;
     }
-    return W25Q64_CAPACITY;
+    else{
+        return LOG_START_ADDR + idx * FLASH_PAGE_SIZE;
+    }
 }
 
 /* In 1 record qua log_write: "rec seq=.. ts=.. az=.. crc=OK|BAD" */

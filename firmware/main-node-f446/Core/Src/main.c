@@ -145,6 +145,7 @@ void storage_task(void *argument);
 void rx_task(void *argument);
 void oled_task(void *argument);
 static void print_reset_reason(void);
+static void i2c1_bus_recovery(void);
 
 static void iwdg_start(void){
     IWDG->KR = 0x5555;
@@ -382,9 +383,11 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+  i2c1_bus_recovery();
+  MX_I2C1_Init();
   HAL_StatusTypeDef oled_st = ssd1306_init(&hi2c1);
-  printf("OLED init st=%d\r\n", oled_st);
-  ssd1306_clear(&hi2c1);
+  HAL_StatusTypeDef clear_st = ssd1306_clear(&hi2c1);
+  printf("OLED init st=%d clear st=%d\r\n", (int)oled_st, (int)clear_st);
 
   ringbuf_init(&rx_rb);
   cli_line_init(&rx_line);
@@ -841,12 +844,39 @@ void rx_task(void *argument){
     }
 }
 
+static void i2c1_bus_recovery(void)
+{
+    HAL_I2C_DeInit(&hi2c1);
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+    GPIO_InitStruct.Pin = GPIO_PIN_8;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = GPIO_PIN_9;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET);
+    for(int i = 0; i < 9; i++){
+        if(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_9) == GPIO_PIN_SET){
+            break;
+        }
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
+        HAL_Delay(1);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET);
+        HAL_Delay(1);
+    }
+}
+
 void oled_task(void *argument)
 {
     for(;;)
     {
-        osMutexAcquire(i2c1_mutex, osWaitForever);
-        char flash_line[11], drop_line[11], ax_line[11];
+        char flash_line[11], drop_line[11], ax_line[11], tmp[11], sys_line[11];
         if(flash_full){
             snprintf(flash_line, sizeof(flash_line), "%s", "FLASH:FULL");
         }
@@ -856,15 +886,18 @@ void oled_task(void *argument)
         else{
             snprintf(flash_line, sizeof(flash_line), "%s", "FLASH:OK  ");
         }
+        snprintf(tmp, sizeof(tmp), "RUN %luHZ", 1000UL / ACQ_PERIOD_MS);
+        snprintf(sys_line, sizeof(sys_line), "%-10s", tmp);
         snprintf(drop_line, sizeof(drop_line), "DROP:%-5lu", (unsigned long)sample_drop_cnt);
         snprintf(ax_line, sizeof(ax_line), "AX:%-7d", (int)last_ax);
 
-        ssd1306_write_str2x(&hi2c1, "RUN 100HZ", 0, 0);
+        osMutexAcquire(i2c1_mutex, osWaitForever);
+        ssd1306_write_str2x(&hi2c1, sys_line, 0, 0);
         ssd1306_write_str2x(&hi2c1, flash_line, 0, 2);
         ssd1306_write_str2x(&hi2c1, drop_line, 0, 4);
         ssd1306_write_str2x(&hi2c1, ax_line, 0, 6);
-
         osMutexRelease(i2c1_mutex);
+
         osDelay(500);
     }
 }

@@ -104,10 +104,17 @@ const osThreadAttr_t rx_attributes = {
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
 
+static const osThreadAttr_t oled_attributes = {
+    .name = "oled",
+    .stack_size = 512 * 4,
+    .priority = (osPriority_t) osPriorityBelowNormal,
+};
+
 osMessageQueueId_t sample_queue;
 static volatile uint32_t sample_drop_cnt = 0;
 static volatile uint32_t pages_ok = 0;
 static volatile uint32_t acq_err_cnt = 0;
+static volatile int16_t last_ax = 0;
 static volatile uint32_t flash_err_cnt = 0;
 static const w25q64_t flash = {
     .hspi    = &hspi1,
@@ -120,6 +127,8 @@ static uint8_t rx_byte;
 volatile uint32_t rx_lost_cnt = 0;
 static osEventFlagsId_t health_flags;
 static volatile bool boot_scan_done = false;
+static volatile bool flash_full = false;
+osMutexId_t i2c1_mutex;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -134,6 +143,7 @@ void storage_task(void *argument);
 
 /* USER CODE BEGIN PFP */
 void rx_task(void *argument);
+void oled_task(void *argument);
 static void print_reset_reason(void);
 
 static void iwdg_start(void){
@@ -376,9 +386,6 @@ int main(void)
   printf("OLED init st=%d\r\n", oled_st);
   ssd1306_clear(&hi2c1);
 
-  ssd1306_write_str2x(&hi2c1, "SYS:RUN", 0, 0);
-  ssd1306_write_str2x(&hi2c1, "DROP:0", 0, 2);
-
   ringbuf_init(&rx_rb);
   cli_line_init(&rx_line);
   printf("=================================\r\n");
@@ -550,6 +557,7 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
+  i2c1_mutex = osMutexNew(NULL);
   log_init();
   /* USER CODE END RTOS_MUTEX */
 
@@ -591,6 +599,8 @@ int main(void)
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   rxHandle = osThreadNew(rx_task, NULL, &rx_attributes);
+
+  osThreadNew(oled_task, NULL, &oled_attributes);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -831,6 +841,34 @@ void rx_task(void *argument){
     }
 }
 
+void oled_task(void *argument)
+{
+    for(;;)
+    {
+        osMutexAcquire(i2c1_mutex, osWaitForever);
+        char flash_line[11], drop_line[11], ax_line[11];
+        if(flash_full){
+            snprintf(flash_line, sizeof(flash_line), "%s", "FLASH:FULL");
+        }
+        else if(flash_err_cnt > 0){
+            snprintf(flash_line, sizeof(flash_line), "%s", "FLASH:ERR ");
+        }
+        else{
+            snprintf(flash_line, sizeof(flash_line), "%s", "FLASH:OK  ");
+        }
+        snprintf(drop_line, sizeof(drop_line), "DROP:%-5lu", (unsigned long)sample_drop_cnt);
+        snprintf(ax_line, sizeof(ax_line), "AX:%-7d", (int)last_ax);
+
+        ssd1306_write_str2x(&hi2c1, "RUN 100HZ", 0, 0);
+        ssd1306_write_str2x(&hi2c1, flash_line, 0, 2);
+        ssd1306_write_str2x(&hi2c1, drop_line, 0, 4);
+        ssd1306_write_str2x(&hi2c1, ax_line, 0, 6);
+
+        osMutexRelease(i2c1_mutex);
+        osDelay(500);
+    }
+}
+
 static void print_reset_reason(void){
     if(__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST)){
         log_write(LOG_LEVEL_INFO, "reset: IWDGRST");
@@ -922,7 +960,9 @@ void acquisition_task(void *argument)
       sample_t s;
       s.seq = sample_cnt;
       s.tick = osKernelGetTickCount();
+      osMutexAcquire(i2c1_mutex, osWaitForever);
       mpu6050_status_t mpu_st = mpu6050_read_raw(&hi2c1, &s.raw);
+      osMutexRelease(i2c1_mutex);
       if(mpu_st != MPU6050_OK){
           acq_err_cnt++;
           char msg[32];
@@ -930,6 +970,7 @@ void acquisition_task(void *argument)
           log_write(LOG_LEVEL_ERROR, msg);
       }
       else{
+          last_ax = s.raw.accel_x;
           osStatus_t os_st = osMessageQueuePut(sample_queue, &s, 0, 0);
           if(os_st != osOK){
               sample_drop_cnt++;
@@ -978,6 +1019,7 @@ void storage_task(void *argument)
         page_cnt++;
         if(page_cnt == RECORDS_PER_PAGE){
             if(write_addr >= W25Q64_CAPACITY){
+               flash_full = true;
                if(full_logged == 0){
                    log_write(LOG_LEVEL_WARN, "flash full, stop logging");
                    full_logged = 1;

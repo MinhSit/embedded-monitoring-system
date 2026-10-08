@@ -13,6 +13,7 @@
 #define W25Q64_PAGE_PROGRAM_TIMEOUT_MS  5     /* tPP max 3 ms + tick margin */
 #define W25Q64_CAPACITY          0x800000UL   /* 8 MB = 64 Mbit */
 #define W25Q64_CMD_READ_DATA     0x03
+#define W25Q64_CHIP_ERASE_TIMEOUT_MS 120000UL
 
 static w25q64_status_t to_status(HAL_StatusTypeDef st)
 {
@@ -166,4 +167,20 @@ w25q64_status_t w25q64_read_data(const w25q64_t *dev, uint32_t addr, uint8_t *da
         return to_status(hal_st);
     }
     return W25Q64_OK;
+}
+
+w25q64_status_t w25q64_chip_erase(const w25q64_t *dev){
+    w25q64_status_t st = w25q64_write_enable(dev);
+    if(st != W25Q64_OK){
+        return st;
+    }
+    uint8_t tx = 0xC7;
+    cs_select(dev);
+    HAL_StatusTypeDef hal_st = HAL_SPI_Transmit(dev->hspi, &tx, 1, W25Q64_SPI_TIMEOUT_MS);
+    cs_deselect(dev);
+    if(hal_st != HAL_OK){
+        return to_status(hal_st);
+    }
+    st = w25q64_wait_busy(dev, W25Q64_CHIP_ERASE_TIMEOUT_MS);
+    return st;
 }

@@ -34,5 +34,7 @@ w25q64_status_t w25q64_page_program(const w25q64_t *dev, uint32_t addr, const ui
 
 w25q64_status_t w25q64_read_data(const w25q64_t *dev, uint32_t addr, uint8_t *data, uint16_t len);
 
+w25q64_status_t w25q64_chip_erase(const w25q64_t *dev);
+
 #endif /* W25Q64 */
 

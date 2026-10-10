@@ -135,7 +135,7 @@ The flash is full in this demo, so no new records are written during the video.
 - OLED: 5x7 text is unreadable on my panel, so all text is 2x; the `FLASH:ERR` state is not tested on hardware yet; I2C bus recovery tested on a small sample only.
 - Single sensor node; no CAN, bootloader or host tools yet (Stage 2).
 - `docs/` is written in Vietnamese.
-- v0.9.1 fixes not yet tested on hardware: UART overrun recovery (`HAL_UART_ErrorCallback`) and the boot-scan failure path (logging disabled, `FLASH:ERR`).
+- v0.9.1: UART overrun recovery (`HAL_UART_ErrorCallback`) and the boot-scan failure path are not tested on hardware (the page-write path with the SPI1 mutex was).
 
 ## Development notes
 

@@ -827,6 +827,16 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
     }
 }
 
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart){
+    if(huart->Instance == USART2){
+        if(huart->ErrorCode & HAL_UART_ERROR_ORE){
+            rx_lost_cnt++;
+        }
+        __HAL_UART_CLEAR_OREFLAG(huart);
+        HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+    }
+}
+
 void rx_task(void *argument){
     uint8_t b;
     for(;;){

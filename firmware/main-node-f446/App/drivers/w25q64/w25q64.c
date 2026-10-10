@@ -74,6 +74,9 @@ w25q64_status_t w25q64_wait_busy(const w25q64_t *dev, uint32_t timeout_ms)
     uint32_t start_tick = HAL_GetTick();
     uint8_t sr1;
     while(1){
+        /* Chốt timeout TRƯỚC khi đọc SR1: nếu task bị task khác chiếm CPU quá timeout,
+         * vẫn còn một lần đọc sau mốc timeout, chip xong rồi thì trả OK, không báo TIMEOUT giả. */
+        int timed_out = (HAL_GetTick() - start_tick > timeout_ms);
         w25q64_status_t st = w25q64_read_status(dev, &sr1);
         if(st != W25Q64_OK){
             return st;
@@ -81,7 +84,7 @@ w25q64_status_t w25q64_wait_busy(const w25q64_t *dev, uint32_t timeout_ms)
         if((sr1 & (uint8_t)W25Q64_SR1_BUSY) == 0){
             return W25Q64_OK;
         }
-        if(HAL_GetTick()  - start_tick > timeout_ms){
+        if(timed_out){
             return W25Q64_ERR_TIMEOUT;
         }
     }

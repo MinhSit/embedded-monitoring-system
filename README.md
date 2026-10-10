@@ -2,7 +2,7 @@
 
 Multi-task firmware for an STM32F446RE (NUCLEO-F446RE) that samples an MPU6050 IMU, stores CRC-protected records in external SPI NOR flash (W25Q64), shows live status on an OLED and exposes a small UART command line. Built as a solo learning project to practice real-time firmware design: drivers written against datasheets, an RTOS task architecture, fault detection and documented validation.
 
-> Status: Stage 1 (single node). Tags `v0.1` to `v0.9` mark each verified block.
+> Status: Stage 1 (single node). Tags `v0.1` to `v0.9.1` mark each verified block.
 
 ## Key features
 
@@ -50,7 +50,16 @@ Layout: `firmware/main-node-f446/App/` holds the application modules (`drivers/`
 | rx | BelowNormal | 2048 B | 10 ms | drains ring buffer, runs CLI |
 | oled | BelowNormal | 2048 B | 500 ms | draws 4 status lines |
 
-FreeRTOS via CMSIS-RTOS2, SysTick replaced by TIM6 as HAL timebase. Details: `docs/freertos.md`.
+FreeRTOS via CMSIS-RTOS2, SysTick replaced by TIM6 as HAL timebase. Shared resources: `i2c1_mutex` (MPU6050 + OLED), `spi1_mutex` (W25Q64: storage task and the `dump` command), log mutex (UART TX). Details: `docs/freertos.md`.
+
+## Driver design
+
+Both drivers are plain C on top of the STM32 HAL, with no RTOS calls inside, so they can run before the scheduler starts (boot self-test) and locking is the caller's job.
+
+- **Error handling**: every function returns a status enum (`W25Q64_OK / ERR_BUS / ERR_TIMEOUT / ERR_PARAM`, `MPU6050_OK / ERR_BUS / ERR_ID / ERR_TIMEOUT`); HAL status is mapped to it, no function blocks forever.
+- **W25Q64** (`App/drivers/w25q64/`): device handle `w25q64_t` (SPI handle + CS port/pin), CS driven by GPIO and always released before returning, also on errors. Write paths send Write Enable first and then poll BUSY in SR1 with a per-operation timeout from the datasheet (page program 5 ms, sector erase 400 ms, chip erase 120 s). The timeout decision uses a status read taken after the deadline, so a task that was preempted past the timeout does not report a false timeout. `page_program` rejects a write that would cross a 256 B page boundary (`ERR_PARAM`) instead of letting the chip wrap; `read_data` rejects reads past 8 MB.
+- **MPU6050** (`App/drivers/mpu6050/`): `init` checks WHO_AM_I (`0x68`) and writes `PWR_MGMT_1 = 0` to wake the chip; `read_raw` reads registers `0x3B..0x48` (14 bytes) in one burst so accel, temp and gyro come from the same sample, and converts big-endian bytes to `int16_t`. I2C timeout is 10 ms.
+- **SSD1306** (`App/drivers/ssd1306/`): init sequence, horizontal addressing mode with a column/page window (`set_pos`), clear, 5x7 font and 2x scaled text.
 
 ## Data flow
 
@@ -70,6 +79,8 @@ Record layout: `docs/record_format.md`. Storage details: `docs/storage_log.md`.
 - **Watchdog**: IWDG 4 s, fed only if acquisition, storage and rx all raised their alive flag since the last check. Verified by deliberately hanging acquisition: log showed `health fail alive=06` three times, then the MCU reset and reported `IWDGRST`. See `docs/watchdog.md`.
 - **Counters** printed every second: `drops`, `pg`, `ae` (sensor errors), `fe` (flash errors), `lost` (UART RX bytes lost).
 - **Stack overflow hook**, and a log mutex so lines printed by different tasks never mix.
+- **UART RX overrun recovery**: on an overrun (ORE) the HAL aborts reception; `HAL_UART_ErrorCallback` clears the flag, counts the lost byte in `lost` and re-arms reception, so the CLI cannot silently die.
+- **Boot scan failure**: if a flash read fails while searching for the resume address, logging is disabled (`fe` counts it, OLED shows `FLASH:ERR`) instead of guessing an address and overwriting the old log.
 - **I2C bus recovery** at boot (clock out up to 9 pulses until SDA is released) after a debugger reset left a slave holding SDA low.
 
 ## Validation
@@ -121,8 +132,6 @@ The flash is full in this demo, so no new records are written during the video.
 - Resume relies on the log having no gaps; there is no power-loss-safe metadata.
 - Watchdog detects stuck tasks, not tasks that run with wrong logic.
 - About 3 in 2900 UART log lines arrive truncated or merged on the PC. Both lines go through the log mutex and are ~270 ms apart, so this is byte loss on the link, not task interleaving; root cause (HSI clock tolerance or the ST-LINK virtual COM port) not yet verified. Logged samples in flash are unaffected.
-- SPI1 has no mutex: the `dump` CLI command (rx task) and the storage task can access the flash at the same time.
-- A flash read error during the boot scan makes the log resume at `0x1000`, which would overwrite the old log.
 - OLED: 5x7 text is unreadable on my panel, so all text is 2x; the `FLASH:ERR` state is not tested on hardware yet; I2C bus recovery tested on a small sample only.
 - Single sensor node; no CAN, bootloader or host tools yet (Stage 2).
 - `docs/` is written in Vietnamese.

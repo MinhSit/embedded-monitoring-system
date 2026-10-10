@@ -50,7 +50,7 @@ typedef struct {
 /* ~11 bytes/ms at 115200 baud -> 100 ms covers ~1 KB per printf call */
 #define UART_TX_TIMEOUT_MS    100U
 #define BOARD_NAME            "NUCLEO-F446RE"
-#define FIRMWARE_VERSION      "0.1.0"
+#define FIRMWARE_VERSION      "0.9.1"
 #define W25Q64_TEST_LEN   256U
 #define HEARTBEAT_PERIOD_MS 1000U
 #define ACQ_PERIOD_MS 100U
@@ -129,6 +129,8 @@ static osEventFlagsId_t health_flags;
 static volatile bool boot_scan_done = false;
 static volatile bool flash_full = false;
 osMutexId_t i2c1_mutex;
+osMutexId_t spi1_mutex;               /* W25Q64 trên SPI1: storage_task và lệnh dump (rx_task) dùng chung */
+static volatile bool log_disabled = false; /* boot scan lỗi đọc: dừng ghi để không ghi đè log cũ */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -219,19 +221,18 @@ static int storage_blank_cb(void *ctx, uint32_t page_index){
     return storage_page_is_blank(ctx, LOG_START_ADDR + page_index * FLASH_PAGE_SIZE);
 }
 
-/* Quét từng page từ LOG_START_ADDR, trả địa chỉ page trống đầu tiên.
- * Hết flash không có page trống thì trả W25Q64_CAPACITY (log đầy).
- * Lỗi đọc flash thì trả LOG_START_ADDR. */
-static uint32_t storage_find_write_addr(const w25q64_t *dev){
+/* Binary search page trống đầu tiên từ LOG_START_ADDR, ghi địa chỉ vào *addr, trả 0.
+ * Hết flash không có page trống thì *addr = W25Q64_CAPACITY (log đầy).
+ * Lỗi đọc flash thì trả -1, *addr không đổi (không đoán địa chỉ để tránh ghi đè log cũ). */
+static int storage_find_write_addr(const w25q64_t *dev, uint32_t *addr){
     uint32_t n_pages = (W25Q64_CAPACITY - LOG_START_ADDR) / FLASH_PAGE_SIZE;
     uint32_t idx;
     int rc = find_first_blank(storage_blank_cb, (void *)dev, n_pages, &idx);
     if(rc < 0){
-        return LOG_START_ADDR;
+        return -1;
     }
-    else{
-        return LOG_START_ADDR + idx * FLASH_PAGE_SIZE;
-    }
+    *addr = LOG_START_ADDR + idx * FLASH_PAGE_SIZE;
+    return 0;
 }
 
 /* In 1 record qua log_write: "rec seq=.. ts=.. az=.. crc=OK|BAD" */
@@ -264,7 +265,9 @@ static void dump_page(const w25q64_t *dev, uint32_t addr){
 static void cmd_dump(size_t argc, char *argv[]){
     (void)argc;
     (void)argv;
+    osMutexAcquire(spi1_mutex, osWaitForever);
     dump_page(&flash, LOG_START_ADDR);
+    osMutexRelease(spi1_mutex);
 }
 
 static void cmd_status(size_t argc, char *argv[])
@@ -291,10 +294,16 @@ static const cli_cmd_t cli_table[] = {
 };
 #define CLI_TABLE_SIZE (sizeof(cli_table) / sizeof(cli_table[0]))
 
+/* In qua log_write (có log_mutex), không dùng cli_print_help (printf trần) để dòng help
+ * không xen với dòng của task khác. cli_print_help vẫn giữ cho test PC. */
 static void cmd_help(size_t argc, char *argv[]){
     (void)argc;
     (void)argv;
-    cli_print_help(cli_table, CLI_TABLE_SIZE);
+    char msg[64];
+    for(size_t i = 0; i < CLI_TABLE_SIZE; i++){
+        snprintf(msg, sizeof(msg), "%s - %s", cli_table[i].name, cli_table[i].help);
+        log_write(LOG_LEVEL_INFO, msg);
+    }
 }
 /* USER CODE END PFP */
 
@@ -561,6 +570,7 @@ int main(void)
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
   i2c1_mutex = osMutexNew(NULL);
+  spi1_mutex = osMutexNew(NULL);
   log_init();
   /* USER CODE END RTOS_MUTEX */
 
@@ -827,6 +837,20 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
     }
 }
 
+/* HAL coi overrun (ORE) là lỗi blocking: hủy receive rồi gọi callback này.
+ * Không bật lại thì UART RX chết vĩnh viễn (rx_task vẫn báo alive nên IWDG không bắt được). */
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart){
+    if(huart->Instance == USART2){
+        if(huart->ErrorCode & HAL_UART_ERROR_ORE){
+            rx_lost_cnt++;                     /* ít nhất 1 byte bị mất */
+        }
+        __HAL_UART_CLEAR_OREFLAG(huart);       /* đọc SR rồi DR: xóa ORE, nếu không IRQ sẽ gọi lại liên tục */
+        if(huart->RxState == HAL_UART_STATE_READY){   /* lỗi không blocking (FE/NE/PE) thì receive vẫn chạy */
+            HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+        }
+    }
+}
+
 void rx_task(void *argument){
     uint8_t b;
     for(;;){
@@ -1033,15 +1057,25 @@ void storage_task(void *argument)
   static uint8_t verify_buf[sizeof(page_buf)];
   uint32_t page_cnt = 0;                      /* số sample đang có trong page_buf */
   static uint8_t full_logged = 0;
-  uint32_t write_addr = storage_find_write_addr(&flash);    /* địa chỉ page tiếp theo sẽ ghi */
+  uint32_t write_addr = W25Q64_CAPACITY;      /* địa chỉ page tiếp theo sẽ ghi */
+  osMutexAcquire(spi1_mutex, osWaitForever);
+  int scan_rc = storage_find_write_addr(&flash, &write_addr);
+  uint32_t bad0 = storage_scan_page(&flash, LOG_START_ADDR);   /* page cũ của lần chạy trước, chưa bị erase */
+  osMutexRelease(spi1_mutex);
   boot_scan_done = true;
   w25q64_status_t flash_st;
-  uint32_t bad0 = storage_scan_page(&flash, LOG_START_ADDR);   /* page cũ của lần chạy trước, chưa bị erase */
   char boot_msg[50];
   snprintf(boot_msg, sizeof(boot_msg), "scan addr=%06lX bad=%lu", LOG_START_ADDR, bad0);
   log_write(LOG_LEVEL_INFO, boot_msg);
-  snprintf(boot_msg, sizeof(boot_msg), "resume addr=%06lX", write_addr);
-  log_write(LOG_LEVEL_INFO, boot_msg);
+  if(scan_rc < 0){
+      log_disabled = true;
+      flash_err_cnt++;                        /* OLED hiện FLASH:ERR */
+      log_write(LOG_LEVEL_ERROR, "boot scan failed, logging disabled");
+  }
+  else{
+      snprintf(boot_msg, sizeof(boot_msg), "resume addr=%06lX", write_addr);
+      log_write(LOG_LEVEL_INFO, boot_msg);
+  }
   /* Infinite loop */
   for(;;)
   {
@@ -1051,7 +1085,10 @@ void storage_task(void *argument)
         record_from_sample(&s, &page_buf[page_cnt]);
         page_cnt++;
         if(page_cnt == RECORDS_PER_PAGE){
-            if(write_addr >= W25Q64_CAPACITY){
+            if(log_disabled){
+                /* boot scan lỗi: bỏ page, không ghi */
+            }
+            else if(write_addr >= W25Q64_CAPACITY){
                flash_full = true;
                if(full_logged == 0){
                    log_write(LOG_LEVEL_WARN, "flash full, stop logging");
@@ -1059,6 +1096,7 @@ void storage_task(void *argument)
                }
             }
             else{
+                osMutexAcquire(spi1_mutex, osWaitForever);   /* giữ suốt erase + program + verify (~50 ms) */
                 flash_st = W25Q64_OK;
                 if(write_addr % SECTOR_SIZE == 0){
                     flash_st = w25q64_sector_erase(&flash, write_addr);
@@ -1099,6 +1137,7 @@ void storage_task(void *argument)
                     }
                     write_addr += FLASH_PAGE_SIZE;   /* một lần duy nhất, dù verify OK hay không */
                 }
+                osMutexRelease(spi1_mutex);
             }
             page_cnt = 0;
         }

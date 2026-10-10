@@ -50,7 +50,7 @@ typedef struct {
 /* ~11 bytes/ms at 115200 baud -> 100 ms covers ~1 KB per printf call */
 #define UART_TX_TIMEOUT_MS    100U
 #define BOARD_NAME            "NUCLEO-F446RE"
-#define FIRMWARE_VERSION      "0.1.0"
+#define FIRMWARE_VERSION      "0.9.1"
 #define W25Q64_TEST_LEN   256U
 #define HEARTBEAT_PERIOD_MS 1000U
 #define ACQ_PERIOD_MS 100U

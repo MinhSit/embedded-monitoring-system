@@ -130,6 +130,7 @@ static volatile bool boot_scan_done = false;
 static volatile bool flash_full = false;
 osMutexId_t i2c1_mutex;
 osMutexId_t spi1_mutex;
+bool log_disabled = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -220,19 +221,20 @@ static int storage_blank_cb(void *ctx, uint32_t page_index){
     return storage_page_is_blank(ctx, LOG_START_ADDR + page_index * FLASH_PAGE_SIZE);
 }
 
-/* Quét từng page từ LOG_START_ADDR, trả địa chỉ page trống đầu tiên.
- * Hết flash không có page trống thì trả W25Q64_CAPACITY (log đầy).
- * Lỗi đọc flash thì trả LOG_START_ADDR. */
-static uint32_t storage_find_write_addr(const w25q64_t *dev){
+/* Binary search page trống đầu tiên từ LOG_START_ADDR, ghi địa chỉ vào *addr, trả 0
+ * Hết flash không có page trống thì *addr = W25Q64_CAPACITY (log đầy)
+ * Lỗi đọc flash thì trả -1, *addr không đổi (không đoán địa chỉ để tránh ghi đè vào log cũ) */
+static int storage_find_write_addr(const w25q64_t *dev, uint32_t *addr){
     uint32_t n_pages = (W25Q64_CAPACITY - LOG_START_ADDR) / FLASH_PAGE_SIZE;
     uint32_t idx;
     int rc = find_first_blank(storage_blank_cb, (void *)dev, n_pages, &idx);
     if(rc < 0){
-        return LOG_START_ADDR;
+        return -1;
     }
     else{
-        return LOG_START_ADDR + idx * FLASH_PAGE_SIZE;
+        *addr = LOG_START_ADDR + idx * FLASH_PAGE_SIZE;
     }
+    return 0;
 }
 
 /* In 1 record qua log_write: "rec seq=.. ts=.. az=.. crc=OK|BAD" */
@@ -1048,7 +1050,8 @@ void storage_task(void *argument)
   uint32_t page_cnt = 0;                      /* số sample đang có trong page_buf */
   static uint8_t full_logged = 0;
   osMutexAcquire(spi1_mutex, osWaitForever);
-  uint32_t write_addr = storage_find_write_addr(&flash);    /* địa chỉ page tiếp theo sẽ ghi */
+  uint32_t write_addr = W25Q64_CAPACITY;   /* giá trị an toàn: nếu scan lỗi thì coi như log đầy */
+  int scan_rc = storage_find_write_addr(&flash, &write_addr);
   boot_scan_done = true;
   w25q64_status_t flash_st;
   uint32_t bad0 = storage_scan_page(&flash, LOG_START_ADDR);   /* page cũ của lần chạy trước, chưa bị erase */
@@ -1056,8 +1059,15 @@ void storage_task(void *argument)
   char boot_msg[50];
   snprintf(boot_msg, sizeof(boot_msg), "scan addr=%06lX bad=%lu", LOG_START_ADDR, bad0);
   log_write(LOG_LEVEL_INFO, boot_msg);
-  snprintf(boot_msg, sizeof(boot_msg), "resume addr=%06lX", write_addr);
-  log_write(LOG_LEVEL_INFO, boot_msg);
+  if(scan_rc < 0){
+      log_disabled = true;
+      flash_err_cnt++;
+      log_write(LOG_LEVEL_ERROR, "boot scan failed, logging disabled");
+  }
+  else{
+      snprintf(boot_msg, sizeof(boot_msg), "resume addr=%06lX", write_addr);
+      log_write(LOG_LEVEL_INFO, boot_msg);
+  }
   /* Infinite loop */
   for(;;)
   {
@@ -1067,7 +1077,10 @@ void storage_task(void *argument)
         record_from_sample(&s, &page_buf[page_cnt]);
         page_cnt++;
         if(page_cnt == RECORDS_PER_PAGE){
-            if(write_addr >= W25Q64_CAPACITY){
+            if(log_disabled){
+                // ko làm làm gì
+            }
+            else if(write_addr >= W25Q64_CAPACITY){
                flash_full = true;
                if(full_logged == 0){
                    log_write(LOG_LEVEL_WARN, "flash full, stop logging");

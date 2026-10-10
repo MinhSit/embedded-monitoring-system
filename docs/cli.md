@@ -16,7 +16,7 @@
 
 ## Điểm yếu đã biết
 
-- `help` dùng `printf` trực tiếp, không qua `log_mutex`, nên dòng help có thể xen kẽ hoặc mất khi task khác đang `log_write`.
+- (Đã sửa ở v0.9.1) `help` từng dùng `printf` trực tiếp (`cli_print_help`), không qua `log_mutex`. Giờ `cmd_help` in từng dòng bằng `log_write`; `cli_print_help` chỉ còn dùng trong test PC.
 - Khi đủ `CLI_MAX_ARGS`, token cuối không được gán NUL, nên `argv` cuối có thể chứa cả phần còn lại của dòng.
 - Dòng dài quá 63 ký tự bị cắt, ký tự thừa bị bỏ, lệnh có thể chạy với nội dung thiếu.
 - Không echo, không history, không kiểm tra số tham số của lệnh.

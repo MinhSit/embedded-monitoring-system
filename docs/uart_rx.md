@@ -17,4 +17,4 @@
 - Khi ring đầy, byte mới bị bỏ và `rx_lost_cnt` tăng 1. Giá trị này in ra ở dòng heartbeat dưới dạng `lost=`.
 - Nếu `rx_task` đọc quá chậm, bên gửi nhồi byte nhanh hơn tốc độ lấy ra nên mất byte.
 - Đã kiểm chứng: gửi 112 byte trong lúc `rx_task` ngủ 3 s, nhận 63 byte, `lost=49`.
-- Chưa xử lý lỗi UART overrun (ORE) và `HAL_UART_ErrorCallback`.
+- Overrun (ORE): byte mới tới khi byte trước chưa được đọc khỏi DR. HAL F4 coi ORE là lỗi blocking: hủy receive rồi gọi `HAL_UART_ErrorCallback`. Từ v0.9.1 callback này tăng `rx_lost_cnt`, xóa cờ ORE (`__HAL_UART_CLEAR_OREFLAG`, nếu không xóa thì ngắt gọi lại liên tục) và gọi lại `HAL_UART_Receive_IT`. Trước đó RX chết vĩnh viễn sau một lần ORE, và IWDG không phát hiện được vì `rx_task` vẫn chạy và báo alive.

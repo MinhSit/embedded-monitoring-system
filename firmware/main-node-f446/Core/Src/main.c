@@ -299,7 +299,11 @@ static const cli_cmd_t cli_table[] = {
 static void cmd_help(size_t argc, char *argv[]){
     (void)argc;
     (void)argv;
-    cli_print_help(cli_table, CLI_TABLE_SIZE);
+    char msg[64];
+    for(size_t i = 0; i < CLI_TABLE_SIZE; i++){
+        snprintf(msg, sizeof(msg), "%s - %s", cli_table[i].name, cli_table[i].help);
+        log_write(LOG_LEVEL_INFO, msg);
+    }
 }
 /* USER CODE END PFP */
 

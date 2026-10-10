@@ -129,6 +129,7 @@ static osEventFlagsId_t health_flags;
 static volatile bool boot_scan_done = false;
 static volatile bool flash_full = false;
 osMutexId_t i2c1_mutex;
+osMutexId_t spi1_mutex;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -264,7 +265,9 @@ static void dump_page(const w25q64_t *dev, uint32_t addr){
 static void cmd_dump(size_t argc, char *argv[]){
     (void)argc;
     (void)argv;
+    osMutexAcquire(spi1_mutex, osWaitForever);
     dump_page(&flash, LOG_START_ADDR);
+    osMutexRelease(spi1_mutex);
 }
 
 static void cmd_status(size_t argc, char *argv[])
@@ -561,6 +564,7 @@ int main(void)
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
   i2c1_mutex = osMutexNew(NULL);
+  spi1_mutex = osMutexNew(NULL);
   log_init();
   /* USER CODE END RTOS_MUTEX */
 
@@ -1043,10 +1047,12 @@ void storage_task(void *argument)
   static uint8_t verify_buf[sizeof(page_buf)];
   uint32_t page_cnt = 0;                      /* số sample đang có trong page_buf */
   static uint8_t full_logged = 0;
+  osMutexAcquire(spi1_mutex, osWaitForever);
   uint32_t write_addr = storage_find_write_addr(&flash);    /* địa chỉ page tiếp theo sẽ ghi */
   boot_scan_done = true;
   w25q64_status_t flash_st;
   uint32_t bad0 = storage_scan_page(&flash, LOG_START_ADDR);   /* page cũ của lần chạy trước, chưa bị erase */
+  osMutexRelease(spi1_mutex);
   char boot_msg[50];
   snprintf(boot_msg, sizeof(boot_msg), "scan addr=%06lX bad=%lu", LOG_START_ADDR, bad0);
   log_write(LOG_LEVEL_INFO, boot_msg);
@@ -1069,6 +1075,7 @@ void storage_task(void *argument)
                }
             }
             else{
+                osMutexAcquire(spi1_mutex, osWaitForever);
                 flash_st = W25Q64_OK;
                 if(write_addr % SECTOR_SIZE == 0){
                     flash_st = w25q64_sector_erase(&flash, write_addr);
@@ -1109,6 +1116,7 @@ void storage_task(void *argument)
                     }
                     write_addr += FLASH_PAGE_SIZE;   /* một lần duy nhất, dù verify OK hay không */
                 }
+                osMutexRelease(spi1_mutex);
             }
             page_cnt = 0;
         }

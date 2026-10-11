@@ -40,16 +40,16 @@
 
 ## SPI1 — W25Q64 Page Program / Read Data
 
-[ẢNH: spi_w25q64_page_program.png]
+![SPI page program](images/spi_w25q64_page_program.png)
 - WREN `06` → CS high → `02 00 00 00 DE AD BE EF`
 - CS rising edge between commands latches WEL
 
-[ẢNH: spi_w25q64_busy_poll.png]
+![SPI busy poll](images/spi_w25q64_busy_poll.png)
 - 256-byte program: 6 polls SR1=`03` (BUSY+WEL), last poll `00`
 - Measured tPP = 419 µs (±60 µs poll resolution); datasheet typ 0.4 ms, max 3 ms
 - WEL clears automatically after program completes
 
-[ẢNH: spi_w25q64_read_data.png]
+![SPI read data](images/spi_w25q64_read_data.png)
 - MOSI `03 00 00 00`, MISO returns `DE AD BE EF`
 - MOSI during data phase = previous rx buffer content (HAL_SPI_Receive), ignored by flash
 

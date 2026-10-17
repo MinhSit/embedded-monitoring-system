@@ -116,13 +116,15 @@ It builds each test into `local/` and prints `PASS`/`FAIL` per test (8 tests, al
 
 ## Demo
 
-Video (49 s, unlisted): https://youtu.be/PI-ddXv6l48
+Video (4:49, unlisted, Vietnamese voice, English subtitles via CC): https://youtu.be/eOGGwiI0Vag
 
-- Board reset: boot log shows the write-address search (`resume addr=800000`), `flash full`, IWDG started, `drops=0`.
-- CLI over UART: `help`, `status`, `dump` (first 8 records, all `crc=OK`).
-- OLED shows `FLASH:FULL` after the 7-hour logging run.
+- Hardware and FreeRTOS task overview.
+- Live UART log: `page full` with sequence range and flash address, `heartbeat` counters (`drops=0 fe=0 lost=0`).
+- Reset while logging: flash self-test 4/4 PASS, binary-search resume to the next page, IWDG started after the scan.
+- OLED status, CLI over UART (`help`, `status`, `dump` with all `crc=OK`), PC unit tests (8/8 PASS).
+- 7.5-hour long-run results and known limitations.
 
-The flash is full in this demo, so no new records are written during the video.
+Older short clip (49 s) after the 7-hour run, flash full (`FLASH:FULL`, logging stopped): https://youtu.be/PI-ddXv6l48
 
 ## Known limitations
 
